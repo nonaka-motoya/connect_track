@@ -1,6 +1,6 @@
 #TARGET=mu_pi_ratio
-#TARGET=connect_track
-TARGET=draw_mu_tracks
+TARGET=connect_track
+#TARGET=draw_mu_tracks
 
 FEDRALIBS := -lEIO -lEdb -lEbase -lEdr -lScan -lAlignment -lEmath -lEphys -lvt -lDataConversion -lEDA -lShower -lScan -lMLP -lSpectrum
 

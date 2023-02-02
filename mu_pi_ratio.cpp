@@ -9,15 +9,17 @@
 #include "TRint.h"
 #include "TLegend.h"
 #include "TStyle.h"
+#include "TCanvas.h"
 
 #include "EdbDataSet.h"
 
 #include "Utils.hpp"
 
-int bin_max = 300;
+int bin_max = 310;
 TCut cut = "nseg>3";
 int num_nu_mu_cc = 0;
 int n_long_mu = 0;
+int n_long_pi = 0;
 std::vector<std::string> v_path;
 
 std::map<int, std::vector<int>> uniqueID;
@@ -76,7 +78,8 @@ bool isTrack(EdbTrackP* track) {
 	return true;
 }
 
-std::pair<TH1D*, TH1D*> track_length_hist(std::string path) {
+std::vector<TH1D*> track_length_hist(std::string path) {
+	std::vector<TH1D*> v_hist;
 
 	// specify event ID.
 	int event_id = 0;
@@ -85,13 +88,15 @@ std::pair<TH1D*, TH1D*> track_length_hist(std::string path) {
 	
 	EdbDataProc* dproc = new EdbDataProc;
 	EdbPVRec* pvr = new EdbPVRec;
-	dproc -> ReadTracksTree(*pvr, path.c_str(), cut); // read linked_tracks with cut npl >= 200.
+	//dproc -> ReadTracksTree(*pvr, path.c_str(), cut); // read linked_tracks with cut npl >= 200.
 	
-	//pvr = Utils::ConnectTrack(path);
+	pvr = Utils::ConnectTrack(path);
 	
 
-	TH1D* mu_hist = new TH1D("mu_hist", "mu_hist", bin_max+1, -0.5, bin_max+0.5);
-	TH1D* pi_hist = new TH1D("pi_hist", "pi_hist", bin_max+1, -0.5, bin_max+0.5);
+	TH1D* f_mu_hist = new TH1D("mu_hist", "", bin_max/2, 0, bin_max);
+	TH1D* f_pi_hist = new TH1D("pi_hist", "", bin_max/2, 0, bin_max);
+	TH1D* l_mu_hist = new TH1D("l_mu_hist", "", bin_max/2, 0, bin_max);
+	TH1D* l_pi_hist = new TH1D("l_pi_hist", "", bin_max/2, 0, bin_max);
 
 	std::cout << "Event : " << event_id << std::endl;
 
@@ -109,19 +114,28 @@ std::pair<TH1D*, TH1D*> track_length_hist(std::string path) {
 		if (track -> GetSegmentFirst() -> ScanID().GetPlate() > 100) continue;
 
 		if (abs(pdg_id)==13) {
-			mu_hist -> Fill(track->Npl());
-			if (track -> Npl() < 3) Utils::PrintTrack(track);
+			f_mu_hist -> Fill(track->GetSegmentFirst()->ScanID().GetPlate());
+			l_mu_hist -> Fill(track->GetSegmentLast()->ScanID().GetPlate());
+			//if (track -> Npl() < 3) Utils::PrintTrack(track);
 			if (track -> Npl() > 200) {
 				n_long_mu ++;
 			} else {
 				v_path.push_back(path);
 			}
 		} else if (abs(pdg_id) == 211) {
-			pi_hist -> Fill(track->Npl());
+			f_pi_hist -> Fill(track->GetSegmentFirst()->ScanID().GetPlate());
+			l_pi_hist -> Fill(track->GetSegmentLast()->ScanID().GetPlate());
+
+			if (track -> Npl() > 200) n_long_pi ++;
 		}
 	}
 
-	return {mu_hist, pi_hist};
+	v_hist.push_back(f_mu_hist);
+	v_hist.push_back(l_mu_hist);
+	v_hist.push_back(f_pi_hist);
+	v_hist.push_back(l_pi_hist);
+
+	return v_hist;
 }
 
 
@@ -135,14 +149,16 @@ int main() {
 	TRint app("app", 0, 0);
 
 	std::string title = std::string(cut.GetTitle());
-	title += ";npl;counts";
-	title = ";npl;counts";
+	title += ";#plate;#tracks";
+	title = ";#plate;#tracks";
 
-	TH1D* mu_hist = new TH1D("mu hist", title.c_str(), bin_max+1, -0.5, bin_max+0.5);
-	TH1D* pi_hist = new TH1D("pi hist", title.c_str(), bin_max+1, -0.5, bin_max+0.5);
+	TH1D *mu_first_hist = new TH1D("mu first hist", title.c_str(), bin_max/2, 0, bin_max);
+	TH1D *pi_first_hist = new TH1D("pi first hist", title.c_str(), bin_max/2, 0, bin_max);
+	TH1D *mu_last_hist = new TH1D("mu last hist", title.c_str(), bin_max/2, 0, bin_max);
+	TH1D *pi_last_hist = new TH1D("pi last hist", title.c_str(), bin_max/2, 0, bin_max);
 	
 	// buffer of histograms
-	std::pair<TH1D*, TH1D*> hist_buf;
+	std::vector<TH1D*> hist_buf;
 
 	std::ifstream input_file;
 	input_file.open("input_list_2.txt", std::ios::in);
@@ -153,8 +169,10 @@ int main() {
 	while (std::getline(input_file, line_buf)) {
 		std::string path = line_buf + "/linked_tracks.root"; // path of linked_tracks.
 		hist_buf = track_length_hist(path);
-		mu_hist -> Add(hist_buf.first);
-		pi_hist -> Add(hist_buf.second);
+		mu_first_hist -> Add(hist_buf[0]);
+		mu_last_hist -> Add(hist_buf[1]);
+		pi_first_hist -> Add(hist_buf[2]);
+		pi_last_hist -> Add(hist_buf[3]);
 		num_file ++;
 	}
 
@@ -162,27 +180,46 @@ int main() {
 	std::cout << num_file << " files are read." << std::endl;
 	std::cout << "Number of NuMuCC: " << num_nu_mu_cc << std::endl;
 
-	mu_hist -> GetYaxis() -> SetRangeUser(0, 450);
 
 	TLegend* legend = new TLegend(0.8,  0.8, 0.9, 0.9);
-	legend -> AddEntry(mu_hist, "muon");
-	legend -> AddEntry(pi_hist, "pion");
+	legend -> AddEntry(mu_first_hist, "muon");
+	legend -> AddEntry(pi_first_hist, "pion");
 
-	mu_hist -> GetCumulative(kFALSE) -> Draw();
-	pi_hist -> SetLineColor(kRed);
-	pi_hist -> GetCumulative(kFALSE) -> Draw("SAME");
+	TCanvas *c1 = new TCanvas("c1", "c1", 600, 600);
+	TCanvas *c2 = new TCanvas("c2", "c2", 600, 600);
+	TCanvas *c3 = new TCanvas("c3", "c3", 600, 600);
+
+	c1 -> cd();
+	mu_first_hist -> GetYaxis() -> SetRangeUser(0, 60);
+	mu_first_hist -> Draw();
+	pi_first_hist -> SetLineColor(kRed);
+	pi_first_hist -> Draw("SAME");
+	legend -> Draw();
+
+	c2 -> cd();
+	mu_last_hist -> GetYaxis() -> SetRangeUser(0, 60);
+	mu_last_hist -> Draw();
+	pi_last_hist -> SetLineColor(kRed);
+	pi_last_hist -> Draw("SAME");
+	legend -> Draw();
 
 	for (auto p: v_path) {
 		std::cout << p << std::endl;
 	}
 
-	std::cout << "Number of muon penetrate 200 plate: " << mu_hist -> GetCumulative(kFALSE) -> GetBinContent(200) << std::endl;
-	std::cout << "Number of pion penetrate 200 plate: " << pi_hist -> GetCumulative(kFALSE) -> GetBinContent(200) << std::endl;
+	// cumulative histograms.
+	c3 -> cd();
+	mu_last_hist -> GetYaxis() -> SetRangeUser(0, 450);
+	mu_last_hist -> GetCumulative(kFALSE) -> Draw();
+	pi_last_hist -> GetCumulative(kFALSE) -> Draw("SAME");
+
+	std::cout << "Number of muon penetrate 300 plate: " << mu_last_hist -> GetCumulative(kFALSE) -> GetBinContent(bin_max/2) << std::endl;
+	std::cout << "Number of pion penetrate 300 plate: " << pi_last_hist -> GetCumulative(kFALSE) -> GetBinContent(bin_max/2) << std::endl;
 	std::cout << "Number of muon npl > 200: " << n_long_mu << std::endl;
+	std::cout << "Number of pion npl > 200: " << n_long_pi << std::endl;
 
 	gStyle -> SetOptStat(0);
 
-	legend -> Draw();
 	app.Run();
 
 	return 0;

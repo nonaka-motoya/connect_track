@@ -169,25 +169,25 @@ EdbSegP *make_virtual_segment(EdbTrackP *track) {
 
 	EdbSegP *seg = new EdbSegP;
 	
-	TGraph* grx = new TGraph();
-	TGraph* gry = new TGraph();
+	TGraph grx;
+	TGraph gry;
 
 	for (int i=0; i<track->N(); i++) {
 		EdbSegP *seg = track -> GetSegment(i);
 
-		grx -> SetPoint(i, seg->Z(), seg->X());
-		gry -> SetPoint(i, seg->Z(), seg->Y());
+		grx.SetPoint(i, seg->Z(), seg->X());
+		gry.SetPoint(i, seg->Z(), seg->Y());
 	}
 
-	grx -> Fit("pol1", "Q");
-	gry -> Fit("pol1", "Q");
+	grx.Fit("pol1", "Q");
+	gry.Fit("pol1", "Q");
 
 	double x = track -> GetSegment(track->N()/2) -> X();
 	double y = track -> GetSegment(track->N()/2) -> Y();
 	double z = track -> GetSegment(track->N()/2) -> Z();
 
-	double tx = grx -> GetFunction("pol1") -> GetParameter(1);
-	double ty = gry -> GetFunction("pol1") -> GetParameter(1);
+	double tx = grx.GetFunction("pol1") -> GetParameter(1);
+	double ty = gry.GetFunction("pol1") -> GetParameter(1);
 
 	int segid = track -> GetSegmentFirst() -> ID();
 	int pid = track -> GetSegmentFirst() -> PID();
@@ -214,7 +214,7 @@ double distance(EdbTrackP *track1, EdbTrackP *track2) {
 // there are bugs.
 int get_min_chi_index(EdbTrackP *track, std::vector<EdbTrackP*> v_tracks) {
 
-	std::cout << "There are " << v_tracks.size() << " candidates." << std::endl;
+	//std::cout << "There are " << v_tracks.size() << " candidates." << std::endl;
 
 	double dist = 1e8;
 	int index = 0;
@@ -277,17 +277,17 @@ EdbPVRec *Utils::ConnectTrack(std::string path) {
 	for (int i=0; i<pvr->Ntracks(); i++) {
 		EdbTrackP *track = pvr -> GetTrack(i);
 
-		if (abs(track -> GetSegmentFirst() -> MCTrack()) != 13) continue;
+		//if (abs(track -> GetSegmentFirst() -> MCTrack()) != 13) continue;
 
 		// if track should be removed -> skip.
 		int track_id = track-> GetSegmentFirst() -> Track();
 		if (std::find(removed_track_id.begin(), removed_track_id.end(), track_id) != removed_track_id.end()) continue;
-		std::cout << "target track ID: " << track_id << std::endl;
+		//std::cout << "target track ID: " << track_id << std::endl;
 
 		while (1) {
 			// get neipghbor tracks.
 			std::vector<EdbTrackP*> v_tracks = hashtable -> GetNeighbors(track);
-			std::cout << "Number of neighbor tracks: " << v_tracks.size() << std::endl;
+			//std::cout << "Number of neighbor tracks: " << v_tracks.size() << std::endl;
 
 			// if neighbor track does not exist -> break.
 			if (v_tracks.size() == 0) break;
@@ -309,13 +309,13 @@ EdbPVRec *Utils::ConnectTrack(std::string path) {
 				// and if two tracks have no common segment
 				double delta_theta = dtheta(track, cand_track);
 				double dist = distance(track, cand_track);
-				std::cout << "MC track ID: " << track -> GetSegmentFirst() -> MCTrack() << "\ttrack ID: " << track -> GetSegmentFirst() -> Track() << "\tcandidate track ID: " << cand_track -> GetSegmentFirst() -> Track() << "\tdtheta: " << delta_theta << "\tdistance: " << dist << std::endl;
+				//std::cout << "MC track ID: " << track -> GetSegmentFirst() -> MCTrack() << "\ttrack ID: " << track -> GetSegmentFirst() -> Track() << "\tcandidate track ID: " << cand_track -> GetSegmentFirst() -> Track() << "\tdtheta: " << delta_theta << "\tdistance: " << dist << std::endl;
 
 				if (!isDuplicate(track, cand_track) and delta_theta < 1 and dist < 200) {
 
 					// fill vector of tracks which are to be connected.
 					// after connecting this track, need to remove this track from pvr.
-					std::cout << "connect!" << std::endl;
+					//std::cout << "connect!" << std::endl;
 					v_tbc_tracks.push_back(cand_track);
 				}
 			}

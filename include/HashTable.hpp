@@ -20,7 +20,25 @@ class HashTable {
 		// constructor
 		HashTable(EdbPVRec* pvr);
 
+		// get around tracks.
 		std::vector<EdbTrackP*> GetNeighbors(EdbTrackP* track);
+
+		// get index.
+		int GetCellIndex(int iv, double v) {
+			int idx = (v - m_vmin[iv]) / m_div[iv];
+			if (idx >= m_n[iv]) idx = m_n[iv] - 1;
+
+			return idx;
+		}
+
+		// find cell.
+		std::vector<EdbTrackP*> FindCell(double cell[3]) {
+			int i = GetCellIndex(0, cell[0]);
+			int j = GetCellIndex(1, cell[1]);
+			int k = GetCellIndex(2, cell[2]);
+
+			return m_table[i][j][k];
+		}
 };
 
 #endif
