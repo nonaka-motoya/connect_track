@@ -90,7 +90,7 @@ bool isTrack(EdbTrackP* track) {
 
 int main() {
 
-	for (int i=0; i<3; i++) {
+	for (int i=6; i<7; i++) {
 		std::string filename = Form("20221202_nuall_200003-00000-dev/FaserMC-MC22_Genie_all_600fbInv_v1-200003-0000%d-dev-EM.root", i);
 		initTruth(filename);
 	}
@@ -110,8 +110,8 @@ int main() {
 	}
 
 	// development
-	//std::string path = "20230107_nuall/evt_2950_pl1_300/linked_tracks.root"; // path of linked_tracks.
-	std::string path = "20230107_nuall/evt_2503_pl1_300/linked_tracks.root"; // path of linked_tracks.
+	std::string path = "20230107_nuall/evt_2950_pl1_300/linked_tracks.root"; // path of linked_tracks.
+	//std::string path = "20230107_nuall/evt_6830_pl1_300/linked_tracks.root"; // path of linked_tracks.
 	Utils::ConnectTrack(path);
 
 	app.Run();

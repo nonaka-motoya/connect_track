@@ -6,6 +6,7 @@
 #include "TH1.h"
 #include "TRint.h"
 #include "TCut.h"
+#include "TStyle.h"
 
 #include "Utils.hpp"
 #include "EdbDataSet.h"
@@ -15,10 +16,14 @@ TCut cut = "nseg>3";
 std::map<int, std::vector<int>> uniqueID; // <evend ID, array(track_id)>.
 std::set<std::string> s_u200nodup; // event include muon whose npl is smaller than 200 but which is not duplicated.
 std::set<std::string> s_dupl; // event include muon whose npl is smaller than 200 but which is not duplicated.
+							  //
+EdbDataProc* dproc = new EdbDataProc;
+EdbPVRec* pvr = new EdbPVRec;
 
-TH1I* dup_hist = new TH1I("num duplicated", ";#duplicate;counts", 10+1, -0.5, 10+0.5);
-TH1D* mom_hist = new TH1D("mom", ";mom (GeV);counts", 100, 0, 10000);
-TH2D* dup_mom_hist = new TH2D("mom", ";#duplicate;mom (GeV)",10, 0, 10, 100, 0, 1000);
+TH1D* pos_hist = new TH1D("pos", ";micron;counts", 25, 0, 100);
+TH1D* ang_hist = new TH1D("ang", ";mrad;counts", 25, 0, 10);
+TH2D* mom_ang_hist = new TH2D("mom ang", ";mrad;Mom (GeV)", 50, 0, 10, 100, 0, 2000);
+TH2D* pos_ang_hist = new TH2D("pos ang", ";micron;mrad", 50, 0, 100, 50, 0, 10);
 
 void initTruth(std::string filename) {
 
@@ -80,29 +85,22 @@ bool isTrack(EdbTrackP* track) {
 
 
 // count duplicated track.
-std::pair<TH1I*, TH2I*> make_hist(std::string path) {
-	TH1I* hist1 = new TH1I("h1", "h1", 10+1, -0.5, 10+0.5);
-	TH2I* hist2 = new TH2I("h2", "h2", 10+1, -0.5, 10+0.5, 300+1, -0.5, 300+0.5);
-
-	EdbDataProc* dproc = new EdbDataProc;
-	EdbPVRec* pvr = new EdbPVRec;
+void make_hist(std::string path) {
 	dproc -> ReadTracksTree(*pvr, path.c_str(), cut); // read linked_tracks with cut npl >= 200.
 	//pvr = Utils::ConnectTrack(path);
 
 	// specify event ID from file name.
 	int event_id = 0;
 	sscanf(path.c_str(), "20230107_nuall/evt_%d", &event_id);
-	//sscanf(path.c_str(), "20230203_nuall_enlarged/evt_%d", &event_id);
 	event_id += 100000;
 	
 	std::cout << "Event : " << event_id << std::endl;
 	std::cout << "Read: " << path << std::endl;
 
 	// map for count duplicated track <MC track  ID, number of tracks>
-	std::map<int, int> mu_num_duplicate_tracks;
 
-	bool over200 = false;
 
+	std::vector<EdbTrackP*> v_muons;
 	for (int i=0; i<pvr->Ntracks(); i++) {
 		EdbTrackP* track = pvr -> GetTrack(i);
 
@@ -112,37 +110,31 @@ std::pair<TH1I*, TH2I*> make_hist(std::string path) {
 		// is track in specific event.
 		if (event_id != track -> GetSegmentFirst() -> MCEvt()) continue;
 
-		int f_pdg_id = track -> GetSegmentFirst() -> MCTrack();
-		int c_pdg_id = track -> GetSegment(track->N()/2) -> MCTrack();
-		int track_id = track -> GetSegmentFirst() -> Volume();
-		int npl = track -> Npl();
-		double mom = track -> GetSegmentFirst() -> P();
-
-		if (npl>200) over200 = true;
-
-		if (abs(f_pdg_id) == 13 and abs(c_pdg_id)==13) {
-			auto iter = mu_num_duplicate_tracks.find(track_id);
-
-			// if track is not found.
-			if (iter == mu_num_duplicate_tracks.end()) {
-				mu_num_duplicate_tracks[track_id] = 1;
-				mom_hist -> Fill(mom);
-			} else {
-				mu_num_duplicate_tracks[track_id] ++;
-			}
-		}
+		int pdg_id = track -> GetSegmentFirst() -> MCTrack();
+		if (abs(pdg_id) == 13) v_muons.push_back(track);
 	}
 
-	for (auto iter = mu_num_duplicate_tracks.begin(); iter != mu_num_duplicate_tracks.end(); ++iter) {
-		dup_hist -> Fill(iter -> second);
-		if (iter -> second == 1 and !over200) {
-			s_u200nodup.insert(path);
-		} else if (iter -> second == 2) {
-			s_dupl.insert(path);
-		}
+	std::sort(v_muons.begin(), v_muons.end(),
+			[] (const EdbTrackP* lhs, const EdbTrackP* rhs) {return lhs->GetSegmentFirst()->ScanID().GetPlate() > rhs->GetSegmentFirst()->ScanID().GetPlate();}
+			);
+
+	for (int i=0; i<v_muons.size()-1; i++) {
+		EdbTrackP* prv_track = v_muons[i];
+		EdbTrackP* nxt_track = v_muons[i+1];
+
+		double dist = Utils::Distance(prv_track, nxt_track);
+		double ang = Utils::Dtheta(prv_track, nxt_track)*1000;
+		double mom = prv_track -> GetSegmentFirst() -> P();
+
+		std::cout << "distance: " << dist << " micron." << "\tangle: " << ang << " mrad" << "\tMom: " << mom << " GeV" << std::endl;
+
+		pos_hist -> Fill(dist);
+		ang_hist -> Fill(ang);
+		mom_ang_hist -> Fill(ang, mom);
+		pos_ang_hist -> Fill(dist, ang);
 	}
 
-	return {hist1, hist2};
+	return;
 }
 
 int main() {
@@ -154,51 +146,34 @@ int main() {
 
 	TRint app("app", 0, 0);
 
-	std::string title = std::string(cut.GetTitle());
-	title += ";#duplicated;counts";
-
-
-	
-	// buffer of histograms
-	std::pair<TH1I*, TH2I*> hist_buf;
-
-	std::ifstream input_file;
-	input_file.open("input_list_2.txt", std::ios::in);
-	//input_file.open("input_list_enlarged.txt", std::ios::in);
+	std::ifstream input_file("broken_muon.csv");
 	std::string line_buf;
 	int num_file = 0;
 
 	// read linked_tracks.root
 	while (std::getline(input_file, line_buf)) {
-		std::string path = line_buf + "/linked_tracks.root"; // path of linked_tracks.
-		hist_buf = make_hist(path);
+		std::string path = line_buf; // path of linked_tracks.
+		make_hist(path);
 		num_file ++;
 	}
 
-	std::ofstream ofs("broken_muon.csv");
-
-	std::cout << "========================================" << std::endl;
-	std::cout << "Number of event include muon whose npl < 200 but which is not duplicated: " << s_u200nodup.size() << std::endl;
-	for (auto p: s_u200nodup) {
-		std::cout << p << std::endl;
-	}
-
-	std::cout << "========================================" << std::endl;
-	std::cout << "Number of event include duplicated muon track: " << s_dupl.size() << std::endl;
-	for (auto p: s_dupl) {
-		std::cout << p << std::endl;
-		ofs << p << std::endl;
-	}
-	std::cout << "========================================" << std::endl;
-
 	TCanvas* c1 = new TCanvas("c1", "c1", 600, 600);
 	TCanvas* c2 = new TCanvas("c2", "c2", 600, 600);
+	TCanvas* c3 = new TCanvas("c3", "c3", 600, 600);
+	TCanvas* c4 = new TCanvas("c4", "c4", 600, 600);
 
 	c1 -> cd();
-	dup_hist -> Draw();
+	pos_hist -> Draw();
 
 	c2 -> cd();
-	mom_hist -> Draw();
+	ang_hist -> Draw();
+
+	c3 -> cd();
+	mom_ang_hist -> SetMarkerStyle(8);
+	mom_ang_hist -> Draw();
+
+	c4 -> cd();
+	pos_ang_hist -> Draw("COLZ");
 
 	app.Run();
 

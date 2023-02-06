@@ -118,7 +118,7 @@ double Utils::CalcTrackAngleDiff(EdbTrackP* track, int index) {
 
 
 // calculate track angle using all segments.
-std::pair<double, double> theta(EdbTrackP *track) {
+std::pair<double, double> Utils::Theta(EdbTrackP *track) {
 
 	TGraph* grx = new TGraph();
 	TGraph* gry = new TGraph();
@@ -140,10 +140,10 @@ std::pair<double, double> theta(EdbTrackP *track) {
 }
 
 // calculate track angle difference between two tracks.
-double dtheta(EdbTrackP *track1, EdbTrackP *track2) {
+double Utils::Dtheta(EdbTrackP *track1, EdbTrackP *track2) {
 
-	std::pair<double, double> theta1 = theta(track1);
-	std::pair<double, double> theta2 = theta(track2);
+	std::pair<double, double> theta1 = Utils::Theta(track1);
+	std::pair<double, double> theta2 = Utils::Theta(track2);
 
 	double dtheta = sqrt((theta2.first-theta1.first)*(theta2.first-theta1.first) + (theta2.second-theta1.second)*(theta2.second-theta1.second));
 
@@ -165,7 +165,7 @@ bool isDuplicate(EdbTrackP* track1, EdbTrackP* track2) {
 	return false;
 }
 
-EdbSegP *make_virtual_segment(EdbTrackP *track) {
+EdbSegP* Utils::MakeVirtualSegment(EdbTrackP *track) {
 
 	EdbSegP *seg = new EdbSegP;
 	
@@ -200,12 +200,12 @@ EdbSegP *make_virtual_segment(EdbTrackP *track) {
 }
 
 // calculate distance between two tracks.
-double distance(EdbTrackP *track1, EdbTrackP *track2) {
+double Utils::Distance(EdbTrackP *track1, EdbTrackP *track2) {
 	//EdbSegP *seg1 = track1 -> GetSegment(track1->N()/2);
 	//EdbSegP *seg2 = track2 -> GetSegment(track2->N()/2);
 
-	EdbSegP *seg1 = make_virtual_segment(track1);
-	EdbSegP *seg2 = make_virtual_segment(track2);
+	EdbSegP *seg1 = Utils::MakeVirtualSegment(track1);
+	EdbSegP *seg2 = Utils::MakeVirtualSegment(track2);
 
 	double distance = EdbEDAUtil::CalcDmin(seg1, seg2);
 	return distance;
@@ -223,7 +223,7 @@ int get_min_chi_index(EdbTrackP *track, std::vector<EdbTrackP*> v_tracks) {
 
 		EdbTrackP *cand_track = v_tracks[i];
 
-		double dist_buf = distance(track, cand_track);
+		double dist_buf = Utils::Distance(track, cand_track);
 
 
 		if (dist_buf < dist) {
@@ -277,7 +277,7 @@ EdbPVRec *Utils::ConnectTrack(std::string path) {
 	for (int i=0; i<pvr->Ntracks(); i++) {
 		EdbTrackP *track = pvr -> GetTrack(i);
 
-		//if (abs(track -> GetSegmentFirst() -> MCTrack()) != 13) continue;
+		if (abs(track -> GetSegmentFirst() -> MCTrack()) != 13) continue;
 
 		// if track should be removed -> skip.
 		int track_id = track-> GetSegmentFirst() -> Track();
@@ -287,7 +287,7 @@ EdbPVRec *Utils::ConnectTrack(std::string path) {
 		while (1) {
 			// get neipghbor tracks.
 			std::vector<EdbTrackP*> v_tracks = hashtable -> GetNeighbors(track);
-			//std::cout << "Number of neighbor tracks: " << v_tracks.size() << std::endl;
+			std::cout << "Number of neighbor tracks: " << v_tracks.size() << std::endl;
 
 			// if neighbor track does not exist -> break.
 			if (v_tracks.size() == 0) break;
@@ -307,11 +307,13 @@ EdbPVRec *Utils::ConnectTrack(std::string path) {
 				// if angle is smaller than threshold angle
 				// and if distance between two tracks is smaller than threshold distance
 				// and if two tracks have no common segment
-				double delta_theta = dtheta(track, cand_track);
-				double dist = distance(track, cand_track);
-				//std::cout << "MC track ID: " << track -> GetSegmentFirst() -> MCTrack() << "\ttrack ID: " << track -> GetSegmentFirst() -> Track() << "\tcandidate track ID: " << cand_track -> GetSegmentFirst() -> Track() << "\tdtheta: " << delta_theta << "\tdistance: " << dist << std::endl;
+				double delta_theta = Utils::Dtheta(track, cand_track);
+				double dist = Utils::Distance(track, cand_track);
 
-				if (!isDuplicate(track, cand_track) and delta_theta < 1 and dist < 200) {
+				if (abs(cand_track -> GetSegmentFirst() -> MCTrack()) == 13)
+					std::cout << "MC track ID: " << track -> GetSegmentFirst() -> MCTrack() << "\ttrack ID: " << track -> GetSegmentFirst() -> Track() << "\tcandidate track ID: " << cand_track -> GetSegmentFirst() -> Track() << "\tdtheta: " << delta_theta << "\tdistance: " << dist << std::endl;
+
+				if (!isDuplicate(track, cand_track) and delta_theta < 0.1 and dist < 100) {
 
 					// fill vector of tracks which are to be connected.
 					// after connecting this track, need to remove this track from pvr.

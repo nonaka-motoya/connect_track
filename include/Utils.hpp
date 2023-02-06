@@ -21,6 +21,10 @@ class Utils {
 		static double CalcTrackAngleDiff(EdbTrackP* track, int index);
 
 		static EdbPVRec *ConnectTrack(std::string path);
+		static std::pair<double, double> Theta(EdbTrackP *track);
+		static double Dtheta(EdbTrackP *track1, EdbTrackP *track2);
+		static EdbSegP *MakeVirtualSegment(EdbTrackP *track);
+		static double Distance(EdbTrackP *track1, EdbTrackP *track2);
 };
 
 

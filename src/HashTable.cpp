@@ -1,96 +1,82 @@
 #include "HashTable.hpp"
+#include <algorithm>
 #include <cmath>
+#include <iterator>
 #include <vector>
+#include <numeric>
 
 HashTable::HashTable(EdbPVRec* pvr) {
 	m_pvr = pvr;
 
-	double xmax = -1e8;
-	double ymax = -1e8;
-	double pmax = -1e8;
-	double xmin = 1e8;
-	double ymin = 1e8;
-	double pmin = 1e8;
-
 	for (int i=0; i<m_pvr->Ntracks(); i++) {
 		EdbTrackP *track = m_pvr -> GetTrack(i);
-		for (int j=0; j<track->N(); j++) {
-			EdbSegP *seg = track -> GetSegment(j);
 
-			double x = seg -> X();
-			double y = seg -> Y();
-			int plate = seg -> ScanID().GetPlate();
-
-			if (pmin > plate) pmin = plate;
-			if (pmax < plate) pmax = plate;
-			if (xmin > x) xmin = x;
-			if (xmax < x) xmax = x;
-			if (ymin > y) ymin = y;
-			if (ymax < y) ymax = y;
-		}
+		m_tracks_f.push_back(track);
+		m_tracks_l.push_back(track);
 	}
 
-	int cellsize = 20;
-	int nx = floor((xmax - xmin)/cellsize);
-	int ny = floor((ymax - ymin)/cellsize);
-	int npl = pmax - pmin + 1;
+	std::cout << m_tracks_f.size() << " tracks are read." << std::endl;
 
-	m_n[0] = nx;
-	m_n[1] = ny;
-	m_n[2] = npl;
-	m_div[0] = (xmax - xmin)/nx;
-	m_div[1] = (ymax - ymin)/ny;
-	m_div[2] = (pmax - pmin)/npl;
-	m_vmin[0] = xmin;
-	m_vmin[1] = ymin;
-	m_vmin[2] = pmin - 0.5;
-	m_vmax[0] = xmax;
-	m_vmax[1] = ymax;
-	m_vmax[2] = pmax + 0.5;
+	std::cout << "Sort tracks with plate." << std::endl;
+	SortTracks();
 }
 
-std::vector<EdbTrackP*> HashTable::GetNeighbors(EdbTrackP *track) {
-	std::vector<EdbTrackP*> v_tracks;
-	double l_x = track -> GetSegmentLast() -> X();
-	double l_y = track -> GetSegmentLast() -> Y();
-	double f_x = track -> GetSegmentFirst() -> X();
-	double f_y = track -> GetSegmentFirst() -> Y();
-	int f_plate = track -> GetSegmentFirst() -> ScanID().GetPlate();
-	int l_plate = track -> GetSegmentLast() -> ScanID().GetPlate();
+bool CompareFirstPlate(const EdbTrackP* track1, const EdbTrackP* track2) {
+	return track1->GetSegmentFirst()->ScanID().GetPlate() < track2->GetSegmentFirst()->ScanID().GetPlate();
+}
 
-	for (int i=0; i<m_pvr->Ntracks(); i++) {
-		EdbTrackP *track_buf = m_pvr -> GetTrack(i);
-		EdbSegP *f_seg = track_buf -> GetSegmentFirst();
-		EdbSegP *l_seg = track_buf -> GetSegmentLast();
+bool CompareLastPlate(const EdbTrackP* track1, const EdbTrackP* track2) {
+	return track1->GetSegmentLast()->ScanID().GetPlate() < track2->GetSegmentLast()->ScanID().GetPlate();
+}
 
-		// search with plate.
-		int f_can_plate = f_seg -> ScanID().GetPlate();
-		int l_can_plate = l_seg -> ScanID().GetPlate();
-		if (abs(l_plate - f_can_plate) <= 6) {
+void HashTable::SortTracks() {
+	std::sort(m_tracks_f.begin(), m_tracks_f.end(), CompareFirstPlate);
+	std::sort(m_tracks_l.begin(), m_tracks_l.end(), CompareLastPlate);
 
-			double f_can_x = f_seg -> X();
-			double f_can_y = f_seg -> Y();
-
-			//std::cout << "track ID: " << track -> GetSegmentFirst() -> Track() << "\tcand track ID: " << track_buf -> GetSegmentFirst() -> Track() << "\tdx: " << abs(x-f_x) << std::endl;
-			
-			
-			// search with x, y
-			if (abs(l_x - f_can_x) < 100 and abs(l_y - f_can_y) < 100) {
-				//std::cout << "last track: " << f_seg -> Track() << std::endl;
-				v_tracks.push_back(track_buf);
-			}
-		} else if (abs(f_plate - l_can_plate) <= 6) {
-
-			double l_can_x = l_seg -> X();
-			double l_can_y = l_seg -> Y();
+	std::cout << "First plate: " << m_tracks_f.front()->GetSegmentFirst()->ScanID().GetPlate() << "\tLast plate: " << m_tracks_f.back()->GetSegmentFirst()->ScanID().GetPlate() << std::endl;
+}
 
 
-			if (abs(f_x - l_can_x) < 100 and abs(f_y - l_can_y) < 100) {
-				//std::cout << "front track: " << f_seg -> Track() << std::endl;
-				v_tracks.push_back(track_buf);
-			}
-		}
+std::vector<EdbTrackP*> HashTable::GetNeighbors(EdbTrackP* track) {
+	int plate = track -> GetSegmentLast() -> ScanID().GetPlate();
+
+	int dpl = 10;
+
+	// forward tracks.
+	std::vector<EdbTrackP*>::iterator iter_lower = std::lower_bound(m_tracks_f.begin(), m_tracks_f.end(), track,
+			[&](const EdbTrackP* track1, EdbTrackP* track2) { return track1->GetSegmentFirst()->ScanID().GetPlate() < track2->GetSegmentLast()->ScanID().GetPlate() - dpl; }
+			);
+
+	std::vector<EdbTrackP*>::iterator iter_upper = std::lower_bound(m_tracks_f.begin(), m_tracks_f.end(), track,
+			[&](const EdbTrackP* track1, EdbTrackP* track2) { return track1->GetSegmentFirst()->ScanID().GetPlate() < track2->GetSegmentLast()->ScanID().GetPlate() + dpl; }
+			);
+
+	int idx_lower = std::distance(m_tracks_f.begin(), iter_lower);
+	int idx_upper = std::distance(m_tracks_f.begin(), iter_upper);
+
+	std::vector<EdbTrackP*> tracks;
+
+	for (int i=idx_lower; i<idx_upper; i++) {
+		tracks.push_back(m_tracks_f[i]);
 	}
 
-	return v_tracks;
+	
+	// backward tracks.
+	iter_lower = std::lower_bound(m_tracks_l.begin(), m_tracks_l.end(), track,
+			[&](const EdbTrackP* track1, EdbTrackP* track2) { return track1->GetSegmentLast()->ScanID().GetPlate() < track2->GetSegmentFirst()->ScanID().GetPlate() - dpl; }
+			);
+
+	iter_upper = std::lower_bound(m_tracks_l.begin(), m_tracks_l.end(), track,
+			[&](const EdbTrackP* track1, EdbTrackP* track2) { return track1->GetSegmentLast()->ScanID().GetPlate() < track2->GetSegmentFirst()->ScanID().GetPlate() + dpl; }
+			);
+
+	idx_lower = std::distance(m_tracks_l.begin(), iter_lower);
+	idx_upper = std::distance(m_tracks_l.begin(), iter_upper);
+
+	for (int i=idx_lower; i<idx_upper; i++) {
+		tracks.push_back(m_tracks_l[i]);
+	}
+
+
+	return tracks;
 }

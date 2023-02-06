@@ -1,5 +1,6 @@
 #include <iostream>
 #include <fstream>
+#include <limits>
 #include <ostream>
 #include <sstream>
 
@@ -23,7 +24,9 @@ int n_long_pi = 0;
 std::vector<std::string> v_path;
 
 std::map<int, std::vector<int>> uniqueID;
+std::map<int, double> decay_pos;
 
+	
 void initTruth(std::string filename) {
 
 	std::cout << "Read " << filename << std::endl;
@@ -32,6 +35,7 @@ void initTruth(std::string filename) {
 	TTree* tree = (TTree*) file -> Get("m_NuMCTruth_tree");
 
 	int event_id, pdg_id;
+	float vz_decay;
 	std::vector<int> *trackid_out_particle = 0;
 	std::vector<int> *pdg_out_particle= 0;
 
@@ -39,11 +43,15 @@ void initTruth(std::string filename) {
 	tree -> SetBranchAddress("m_pdg_id", &pdg_id);
 	tree -> SetBranchAddress("m_trackid_out_particle", &trackid_out_particle);
 	tree -> SetBranchAddress("m_pdg_out_particle", &pdg_out_particle);
+	tree -> SetBranchAddress("m_vz_decay", &vz_decay);
 
 	for (int i=0; i<tree->GetEntries(); i++) {
 		tree -> GetEntry(i);
 
 		if (abs(pdg_id) != 14) continue;
+		if (vz_decay > -3100 and vz_decay < -2500) {
+			decay_pos[event_id+100000] = (vz_decay+3000) * 1e3; // converte global -> local, mm -> micron.
+		}
 
 		std::vector<int> trackid_buf;
 		for (int j=0; j<trackid_out_particle->size(); j++) {
@@ -54,7 +62,7 @@ void initTruth(std::string filename) {
 		if (uniqueID.find(event_id+100000) == uniqueID.end()) {
 			uniqueID[event_id+100000] = trackid_buf;
 		} else {
-			uniqueID[event_id+10000].insert(uniqueID[event_id+100000].end(), trackid_buf.begin(), trackid_buf.end());
+			uniqueID[event_id+100000].insert(uniqueID[event_id+100000].end(), trackid_buf.begin(), trackid_buf.end());
 		}
 	}
 }
@@ -62,6 +70,7 @@ void initTruth(std::string filename) {
 bool isTrack(EdbTrackP* track) {
 	int event_id = track -> GetSegmentFirst() -> MCEvt();
 	int track_id = track -> GetSegmentFirst() -> Volume();
+	double z = track -> GetSegmentFirst() -> Z();
 
 	//std::cout << "event id: " << event_id << "\ttrack id: " << track_id << std::endl;
 
@@ -74,6 +83,10 @@ bool isTrack(EdbTrackP* track) {
 		if (std::find(v_trackid.begin(), v_trackid.end(), track_id) == v_trackid.end()) return false;
 	}
 
+	if (abs(z - decay_pos[event_id]) > 20*1e3) {
+		std::cout << z << "\t" << decay_pos[event_id] << std::endl;
+		return false;
+	}
 	//std::cout << "matching event ID, track ID: " << event_id << ", " << track_id << std::endl;
 	return true;
 }
@@ -81,16 +94,16 @@ bool isTrack(EdbTrackP* track) {
 std::vector<TH1D*> track_length_hist(std::string path) {
 	std::vector<TH1D*> v_hist;
 
+	EdbDataProc* dproc = new EdbDataProc;
+	EdbPVRec* pvr = new EdbPVRec;
+
 	// specify event ID.
 	int event_id = 0;
 	sscanf(path.c_str(), "20230107_nuall/evt_%d", &event_id);
 	event_id += 100000;
+	dproc -> ReadTracksTree(*pvr, path.c_str(), cut); // read linked_tracks with cut npl >= 200.
 	
-	EdbDataProc* dproc = new EdbDataProc;
-	EdbPVRec* pvr = new EdbPVRec;
-	//dproc -> ReadTracksTree(*pvr, path.c_str(), cut); // read linked_tracks with cut npl >= 200.
-	
-	pvr = Utils::ConnectTrack(path);
+	//pvr = Utils::ConnectTrack(path);
 	
 
 	TH1D* f_mu_hist = new TH1D("mu_hist", "", bin_max/2, 0, bin_max);
@@ -111,11 +124,11 @@ std::vector<TH1D*> track_length_hist(std::string path) {
 
 		if (event_id != track -> GetSegmentFirst() -> MCEvt()) continue;
 
-		if (track -> GetSegmentFirst() -> ScanID().GetPlate() > 100) continue;
+		//if (track -> GetSegmentFirst() -> ScanID().GetPlate() > 100) continue;
 
 		if (abs(pdg_id)==13) {
-			f_mu_hist -> Fill(track->GetSegmentFirst()->ScanID().GetPlate());
-			l_mu_hist -> Fill(track->GetSegmentLast()->ScanID().GetPlate());
+			f_mu_hist -> Fill(track->Npl());
+			l_mu_hist -> Fill(track->Npl());
 			//if (track -> Npl() < 3) Utils::PrintTrack(track);
 			if (track -> Npl() > 200) {
 				n_long_mu ++;
@@ -134,6 +147,9 @@ std::vector<TH1D*> track_length_hist(std::string path) {
 	v_hist.push_back(l_mu_hist);
 	v_hist.push_back(f_pi_hist);
 	v_hist.push_back(l_pi_hist);
+
+	delete dproc;
+	delete pvr;
 
 	return v_hist;
 }
@@ -181,44 +197,61 @@ int main() {
 	std::cout << "Number of NuMuCC: " << num_nu_mu_cc << std::endl;
 
 
-	TLegend* legend = new TLegend(0.8,  0.8, 0.9, 0.9);
-	legend -> AddEntry(mu_first_hist, "muon");
-	legend -> AddEntry(pi_first_hist, "pion");
+	//TLegend* legend = new TLegend(0.7,  0.7, 0.9, 0.9);
+	//legend -> AddEntry(mu_first_hist, "muon");
+	//legend -> AddEntry(pi_first_hist, "pion");
 
-	TCanvas *c1 = new TCanvas("c1", "c1", 600, 600);
-	TCanvas *c2 = new TCanvas("c2", "c2", 600, 600);
+	//TCanvas *c1 = new TCanvas("c1", "c1", 600, 600);
+	//TCanvas *c2 = new TCanvas("c2", "c2", 600, 600);
 	TCanvas *c3 = new TCanvas("c3", "c3", 600, 600);
 
-	c1 -> cd();
-	mu_first_hist -> GetYaxis() -> SetRangeUser(0, 60);
-	mu_first_hist -> Draw();
-	pi_first_hist -> SetLineColor(kRed);
-	pi_first_hist -> Draw("SAME");
-	legend -> Draw();
+	//c1 -> cd();
+	//mu_first_hist -> GetYaxis() -> SetRangeUser(0, 60);
+	//mu_first_hist -> Draw();
+	//pi_first_hist -> SetLineColor(kRed);
+	//pi_first_hist -> Draw("SAME");
+	//legend -> Draw();
 
-	c2 -> cd();
-	mu_last_hist -> GetYaxis() -> SetRangeUser(0, 60);
-	mu_last_hist -> Draw();
-	pi_last_hist -> SetLineColor(kRed);
-	pi_last_hist -> Draw("SAME");
-	legend -> Draw();
+	//c2 -> cd();
+	//mu_last_hist -> GetYaxis() -> SetRangeUser(0, 60);
+	//mu_last_hist -> Draw();
+	//pi_last_hist -> SetLineColor(kRed);
+	//pi_last_hist -> Draw("SAME");
+	//legend -> Draw();
 
 	for (auto p: v_path) {
 		std::cout << p << std::endl;
 	}
 
+	gStyle -> SetOptStat(0);
 	// cumulative histograms.
 	c3 -> cd();
-	mu_last_hist -> GetYaxis() -> SetRangeUser(0, 450);
-	mu_last_hist -> GetCumulative(kFALSE) -> Draw();
-	pi_last_hist -> GetCumulative(kFALSE) -> Draw("SAME");
+	int num_mu = mu_last_hist -> GetEntries();
+	int num_pi = pi_last_hist -> GetEntries();
+
+	TH1 *mu_cum_hist;
+	TH1 *pi_cum_hist;
+
+	TLegend* cum_legend = new TLegend(0.7,  0.7, 0.9, 0.9);
+	mu_cum_hist = mu_last_hist -> GetCumulative(kFALSE);
+	pi_cum_hist = pi_last_hist -> GetCumulative(kFALSE);
+	//mu_cum_hist -> Scale(1./num_mu);
+	//pi_cum_hist -> Scale(1./num_pi);
+	mu_cum_hist -> SetTitle(";#plate;#tracks (a.u.)");
+	mu_cum_hist -> Draw();
+	pi_cum_hist -> SetLineColor(kRed);
+	pi_cum_hist -> Draw("SAME");
+	cum_legend -> Draw();
+
+	cum_legend -> AddEntry(mu_cum_hist, "Muon");
+	cum_legend -> AddEntry(pi_cum_hist, "Pion");
+
 
 	std::cout << "Number of muon penetrate 300 plate: " << mu_last_hist -> GetCumulative(kFALSE) -> GetBinContent(bin_max/2) << std::endl;
 	std::cout << "Number of pion penetrate 300 plate: " << pi_last_hist -> GetCumulative(kFALSE) -> GetBinContent(bin_max/2) << std::endl;
 	std::cout << "Number of muon npl > 200: " << n_long_mu << std::endl;
 	std::cout << "Number of pion npl > 200: " << n_long_pi << std::endl;
 
-	gStyle -> SetOptStat(0);
 
 	app.Run();
 
