@@ -86,8 +86,8 @@ std::pair<TH1I*, TH2I*> make_hist(std::string path) {
 
 	EdbDataProc* dproc = new EdbDataProc;
 	EdbPVRec* pvr = new EdbPVRec;
-	dproc -> ReadTracksTree(*pvr, path.c_str(), cut); // read linked_tracks with cut npl >= 200.
-	//pvr = Utils::ConnectTrack(path);
+	//dproc -> ReadTracksTree(*pvr, path.c_str(), cut); // read linked_tracks with cut npl >= 200.
+	pvr = Utils::ConnectTrack(path);
 
 	// specify event ID from file name.
 	int event_id = 0;

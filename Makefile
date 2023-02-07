@@ -4,6 +4,7 @@ TARGET=mu_pi_ratio
 #TARGET=draw_broken
 #TARGET=draw_pi_tracks
 #TARGET=check_hashtable
+#TARGET=veto_outgo
 
 FEDRALIBS := -lEIO -lEdb -lEbase -lEdr -lScan -lAlignment -lEmath -lEphys -lvt -lDataConversion -lEDA -lShower -lScan -lMLP -lSpectrum
 

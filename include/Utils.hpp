@@ -25,6 +25,7 @@ class Utils {
 		static double Dtheta(EdbTrackP *track1, EdbTrackP *track2);
 		static EdbSegP *MakeVirtualSegment(EdbTrackP *track);
 		static double Distance(EdbTrackP *track1, EdbTrackP *track2);
+		static bool IsOutgo(EdbTrackP* track, EdbPVRec* pvr);
 };
 
 

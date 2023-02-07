@@ -272,17 +272,13 @@ EdbPVRec *Utils::ConnectTrack(std::string path) {
 	
 	std::vector<int> removed_track_id; // track ID which should be removed.
 
-	TObjArray *selected = new TObjArray; // array of EdbTrackP which is connected.
-
 	for (int i=0; i<pvr->Ntracks(); i++) {
 		EdbTrackP *track = pvr -> GetTrack(i);
-
-		if (abs(track -> GetSegmentFirst() -> MCTrack()) != 13) continue;
 
 		// if track should be removed -> skip.
 		int track_id = track-> GetSegmentFirst() -> Track();
 		if (std::find(removed_track_id.begin(), removed_track_id.end(), track_id) != removed_track_id.end()) continue;
-		//std::cout << "target track ID: " << track_id << std::endl;
+		std::cout << "target track ID: " << track_id << std::endl;
 
 		while (1) {
 			// get neipghbor tracks.
@@ -310,14 +306,12 @@ EdbPVRec *Utils::ConnectTrack(std::string path) {
 				double delta_theta = Utils::Dtheta(track, cand_track);
 				double dist = Utils::Distance(track, cand_track);
 
-				if (abs(cand_track -> GetSegmentFirst() -> MCTrack()) == 13)
-					std::cout << "MC track ID: " << track -> GetSegmentFirst() -> MCTrack() << "\ttrack ID: " << track -> GetSegmentFirst() -> Track() << "\tcandidate track ID: " << cand_track -> GetSegmentFirst() -> Track() << "\tdtheta: " << delta_theta << "\tdistance: " << dist << std::endl;
-
-				if (!isDuplicate(track, cand_track) and delta_theta < 0.1 and dist < 100) {
+				if (!isDuplicate(track, cand_track) and delta_theta < 0.007 and dist < 70) {
 
 					// fill vector of tracks which are to be connected.
 					// after connecting this track, need to remove this track from pvr.
-					//std::cout << "connect!" << std::endl;
+					std::cout << "MC track ID: " << track -> GetSegmentFirst() -> MCTrack() << "\ttrack ID: " << track -> GetSegmentFirst() -> Track() << "\tcandidate track ID: " << cand_track -> GetSegmentFirst() -> Track() << "\tdtheta: " << delta_theta << "\tdistance: " << dist << std::endl;
+					std::cout << "connect!" << std::endl;
 					v_tbc_tracks.push_back(cand_track);
 				}
 			}
@@ -326,18 +320,19 @@ EdbPVRec *Utils::ConnectTrack(std::string path) {
 				break;
 			} else if (v_tbc_tracks.size() == 1) {
 				add_tracks(track, v_tbc_tracks.front());
+				removed_track_id.push_back(track -> GetSegmentFirst() -> Track());
 				removed_track_id.push_back(v_tbc_tracks.front() -> GetSegmentFirst() -> Track());
 				//track -> PrintNice();
 			} else {
 				int index = get_min_chi_index(track, v_tbc_tracks);
 				add_tracks(track, v_tbc_tracks[index]);
+				removed_track_id.push_back(track -> GetSegmentFirst() -> Track());
 				removed_track_id.push_back(v_tbc_tracks[index] -> GetSegmentFirst() -> Track());
 			}
 		}
 
-		selected -> Add(track);
+		std::cout << "Add " << track -> GetSegmentFirst() -> Track() << std::endl; 
 		connected_pvr  -> AddTrack(track);
-		removed_track_id.push_back(track->GetSegmentFirst()->Track());
 	}
 
 	dproc -> MakeTracksTree(connected_pvr, "connect_tracks.root");
@@ -352,4 +347,69 @@ EdbPVRec *Utils::ConnectTrack(std::string path) {
 	//}
 
 	return connected_pvr;
+}
+
+bool Utils::IsOutgo(EdbTrackP *track, EdbPVRec *pvr) {
+	int ipl_min = 1e9;
+	int ipl_max = -1e9;
+	double xmin =  1e9;
+	double xmax = -1e9;
+	double ymin =  1e9;
+	double ymax = -1e9;
+
+	for (int i = 0; i <pvr->Ntracks(); i++) {
+		EdbTrackP* track = pvr -> GetTrack(i);
+		
+		for (int j=0; j<track->N(); j++) {
+			EdbSegP* seg = track -> GetSegment(j);
+			int plate = seg->Plate();
+			double x = seg -> X();
+			double y = seg -> Y();
+
+			if (ipl_min > plate) ipl_min = plate;
+			if (ipl_max < plate) ipl_max = plate;
+			if (xmin > x) xmin = x;
+			if (xmax < x) xmax = x;
+			if (ymin > y) ymin = y;
+			if (ymax < y) ymax = y;
+		}
+
+	}
+
+	std::cout << "ipl " << ipl_min << " - " << ipl_max << std::endl;
+	std::cout << "X: (" << xmax << ", " << xmin << ")\tY: (" << ymax << ", " << ymin << ")" << std::endl;
+	
+	if (track -> GetSegmentLast() -> ScanID().GetPlate() == ipl_max) return false;
+
+	// fit track
+	TGraph grx, gry;
+
+	for (int i=0; i<track->N(); i++) {
+		EdbSegP* seg = track -> GetSegment(i);
+		grx.SetPoint(i, seg->Z(), seg->X());
+		gry.SetPoint(i, seg->Z(), seg->Y());
+	}
+
+	grx.Fit("pol1", "Q");
+	gry.Fit("pol1", "Q");
+
+	double tx = grx.GetFunction("pol1") -> GetParameter(1);
+	double ty = gry.GetFunction("pol1") -> GetParameter(1);
+	
+	double dz = 1440;
+	int spl_max = track -> GetSegmentLast() -> ScanID().GetPlate();
+
+	double z = (ipl_max - spl_max) * dz;
+	double x = track -> GetSegmentLast() -> X();
+	double y = track -> GetSegmentLast() -> Y();
+
+	x += tx * z;
+	y += ty * z;
+
+	std::cout << "X: " << x << "\tY: " << y << std::endl;
+
+	if (x > xmax or x < xmin or y > ymax or y < ymin) return true;
+	
+	std::cout << "Do not outgo" << std::endl;
+	return false;
 }

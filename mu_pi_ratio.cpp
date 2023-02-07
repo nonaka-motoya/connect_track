@@ -18,13 +18,11 @@
 
 int bin_max = 310;
 TCut cut = "nseg>3";
-int num_nu_mu_cc = 0;
 int n_long_mu = 0;
 int n_long_pi = 0;
 std::vector<std::string> v_path;
 
 std::map<int, std::vector<int>> uniqueID;
-std::map<int, double> decay_pos;
 
 	
 void initTruth(std::string filename) {
@@ -49,14 +47,10 @@ void initTruth(std::string filename) {
 		tree -> GetEntry(i);
 
 		if (abs(pdg_id) != 14) continue;
-		if (vz_decay > -3100 and vz_decay < -2500) {
-			decay_pos[event_id+100000] = (vz_decay+3000) * 1e3; // converte global -> local, mm -> micron.
-		}
 
 		std::vector<int> trackid_buf;
 		for (int j=0; j<trackid_out_particle->size(); j++) {
 			trackid_buf.push_back(trackid_out_particle->at(j));
-			//if (abs(pdg_out_particle->at(j)) == 13) num_nu_mu_cc ++;
 		}
 
 		if (uniqueID.find(event_id+100000) == uniqueID.end()) {
@@ -83,75 +77,127 @@ bool isTrack(EdbTrackP* track) {
 		if (std::find(v_trackid.begin(), v_trackid.end(), track_id) == v_trackid.end()) return false;
 	}
 
-	if (abs(z - decay_pos[event_id]) > 20*1e3) {
-		std::cout << z << "\t" << decay_pos[event_id] << std::endl;
-		return false;
-	}
 	//std::cout << "matching event ID, track ID: " << event_id << ", " << track_id << std::endl;
 	return true;
 }
 
-std::vector<TH1D*> track_length_hist(std::string path) {
-	std::vector<TH1D*> v_hist;
-
-	EdbDataProc* dproc = new EdbDataProc;
-	EdbPVRec* pvr = new EdbPVRec;
-
-	// specify event ID.
-	int event_id = 0;
-	sscanf(path.c_str(), "20230107_nuall/evt_%d", &event_id);
-	event_id += 100000;
-	dproc -> ReadTracksTree(*pvr, path.c_str(), cut); // read linked_tracks with cut npl >= 200.
-	
-	//pvr = Utils::ConnectTrack(path);
-	
-
-	TH1D* f_mu_hist = new TH1D("mu_hist", "", bin_max/2, 0, bin_max);
-	TH1D* f_pi_hist = new TH1D("pi_hist", "", bin_max/2, 0, bin_max);
-	TH1D* l_mu_hist = new TH1D("l_mu_hist", "", bin_max/2, 0, bin_max);
-	TH1D* l_pi_hist = new TH1D("l_pi_hist", "", bin_max/2, 0, bin_max);
-
+void track_length_hist(EdbPVRec* pvr, int event_id, TH1D* mu_hist, TH1D* pi_hist) {
 	std::cout << "Event : " << event_id << std::endl;
 
-	std::cout << "Read: " << path << std::endl;
+	std::map<int, std::vector<EdbTrackP*>> primary_muons; // <trackID, EdbTrack>.
+	std::map<int, std::vector<EdbTrackP*>> primary_pions; // <trackID, EdbTrack>.
 
 	for (int i=0; i<pvr->Ntracks(); i++) {
 		EdbTrackP* track = pvr -> GetTrack(i);
 
 		int pdg_id = track -> GetSegmentFirst() -> MCTrack();
+		int track_id = track -> GetSegmentFirst() -> Volume();
 
 		if (!isTrack(track)) continue;
 
 		if (event_id != track -> GetSegmentFirst() -> MCEvt()) continue;
 
-		//if (track -> GetSegmentFirst() -> ScanID().GetPlate() > 100) continue;
+		if (abs(track -> GetSegmentFirst() -> MCTrack()) == 13 and Utils::IsOutgo(track, pvr)) return;
 
 		if (abs(pdg_id)==13) {
-			f_mu_hist -> Fill(track->Npl());
-			l_mu_hist -> Fill(track->Npl());
+			primary_muons[track_id].push_back(track);
 			//if (track -> Npl() < 3) Utils::PrintTrack(track);
 			if (track -> Npl() > 200) {
 				n_long_mu ++;
 			} else {
-				v_path.push_back(path);
+				//v_path.push_back(path);
 			}
 		} else if (abs(pdg_id) == 211) {
-			f_pi_hist -> Fill(track->GetSegmentFirst()->ScanID().GetPlate());
-			l_pi_hist -> Fill(track->GetSegmentLast()->ScanID().GetPlate());
-
+			primary_pions[track_id].push_back(track);
 			if (track -> Npl() > 200) n_long_pi ++;
 		}
 	}
 
-	v_hist.push_back(f_mu_hist);
-	v_hist.push_back(l_mu_hist);
-	v_hist.push_back(f_pi_hist);
-	v_hist.push_back(l_pi_hist);
+	for (auto iter: primary_muons) {
+		std::vector<EdbTrackP*> tracks = iter.second;
+		std::sort(tracks.begin(), tracks.end(),
+				[](EdbTrackP* lhs, EdbTrackP* rhs) { return lhs -> GetSegmentFirst() -> PID() < rhs -> GetSegmentFirst() -> PID(); });
+		mu_hist -> Fill(tracks.front() -> Npl());
+	}
 
-	delete dproc;
-	delete pvr;
+	for (auto iter: primary_pions) {
+		std::vector<EdbTrackP*> tracks = iter.second;
+		std::sort(tracks.begin(), tracks.end(),
+				[](EdbTrackP* lhs, EdbTrackP* rhs) { return lhs -> GetSegmentFirst() -> PID() < rhs -> GetSegmentFirst() -> PID(); });
+		pi_hist -> Fill(tracks.front() -> Npl());
+	}
 
-	return v_hist;
+
+	return ;
+}
+
+void make_mu_hist(EdbPVRec* pvr, int event_id, TH1D* mu_hist) {
+
+	std::map<int, std::vector<EdbTrackP*>> primary_muons; // <trackID, EdbTrack>.
+
+	for (int i=0; i<pvr->Ntracks(); i++) {
+		EdbTrackP* track = pvr -> GetTrack(i);
+
+		int pdg_id = track -> GetSegmentFirst() -> MCTrack();
+		int track_id = track -> GetSegmentFirst() -> Volume();
+
+		if (!isTrack(track)) continue;
+
+		if (event_id != track -> GetSegmentFirst() -> MCEvt()) continue;
+
+		if (abs(track -> GetSegmentFirst() -> MCTrack()) == 13 and Utils::IsOutgo(track, pvr)) return;
+
+		if (abs(pdg_id)==13) {
+			primary_muons[track_id].push_back(track);
+			//if (track -> Npl() < 3) Utils::PrintTrack(track);
+			if (track -> Npl() > 200) {
+				n_long_mu ++;
+			} else {
+				//v_path.push_back(path);
+			}
+		}
+	}
+
+	for (auto iter: primary_muons) {
+		std::vector<EdbTrackP*> tracks = iter.second;
+		std::sort(tracks.begin(), tracks.end(),
+				[](EdbTrackP* lhs, EdbTrackP* rhs) { return lhs -> GetSegmentFirst() -> PID() < rhs -> GetSegmentFirst() -> PID(); });
+		mu_hist -> Fill(tracks.front() -> Npl());
+	}
+
+	return ;
+}
+
+void make_pi_hist(EdbPVRec* pvr, int event_id, TH1D* pi_hist) {
+
+
+	std::map<int, std::vector<EdbTrackP*>> primary_pions; // <trackID, EdbTrack>.
+
+	for (int i=0; i<pvr->Ntracks(); i++) {
+		EdbTrackP* track = pvr -> GetTrack(i);
+
+		int pdg_id = track -> GetSegmentFirst() -> MCTrack();
+		int track_id = track -> GetSegmentFirst() -> Volume();
+
+		if (!isTrack(track)) continue;
+
+		if (event_id != track -> GetSegmentFirst() -> MCEvt()) continue;
+
+		if (abs(pdg_id) == 211) {
+			primary_pions[track_id].push_back(track);
+			if (track -> Npl() > 200) n_long_pi ++;
+		}
+	}
+
+	for (auto iter: primary_pions) {
+		std::vector<EdbTrackP*> tracks = iter.second;
+		std::sort(tracks.begin(), tracks.end(),
+				[](EdbTrackP* lhs, EdbTrackP* rhs) { return lhs -> GetSegmentFirst() -> PID() < rhs -> GetSegmentFirst() -> PID(); });
+		pi_hist -> Fill(tracks.front() -> Npl());
+	}
+
+
+	return ;
 }
 
 
@@ -168,10 +214,8 @@ int main() {
 	title += ";#plate;#tracks";
 	title = ";#plate;#tracks";
 
-	TH1D *mu_first_hist = new TH1D("mu first hist", title.c_str(), bin_max/2, 0, bin_max);
-	TH1D *pi_first_hist = new TH1D("pi first hist", title.c_str(), bin_max/2, 0, bin_max);
-	TH1D *mu_last_hist = new TH1D("mu last hist", title.c_str(), bin_max/2, 0, bin_max);
-	TH1D *pi_last_hist = new TH1D("pi last hist", title.c_str(), bin_max/2, 0, bin_max);
+	TH1D *mu_hist = new TH1D("mu hist", title.c_str(), bin_max/2, 0, bin_max);
+	TH1D *pi_hist = new TH1D("pi hist", title.c_str(), bin_max/2, 0, bin_max);
 	
 	// buffer of histograms
 	std::vector<TH1D*> hist_buf;
@@ -184,40 +228,29 @@ int main() {
 	// read linked_tracks.root
 	while (std::getline(input_file, line_buf)) {
 		std::string path = line_buf + "/linked_tracks.root"; // path of linked_tracks.
-		hist_buf = track_length_hist(path);
-		mu_first_hist -> Add(hist_buf[0]);
-		mu_last_hist -> Add(hist_buf[1]);
-		pi_first_hist -> Add(hist_buf[2]);
-		pi_last_hist -> Add(hist_buf[3]);
+
+		EdbDataProc* dproc = new EdbDataProc;
+		EdbPVRec* pvr = new EdbPVRec;
+
+		// specify event ID.
+		int event_id = 0;
+		sscanf(path.c_str(), "20230107_nuall/evt_%d", &event_id);
+		event_id += 100000;
+		//dproc -> ReadTracksTree(*pvr, path.c_str(), cut); // read linked_tracks with cut npl >= 200.
+		
+		pvr = Utils::ConnectTrack(path);
+	
+
+		//track_length_hist(pvr, event_id, mu_hist, pi_hist);
+		make_mu_hist(pvr, event_id, mu_hist);
+		make_pi_hist(pvr, event_id, pi_hist);
 		num_file ++;
 	}
 
 	std::cout << "numeber of uniqueID: " << uniqueID.size() << std::endl;
 	std::cout << num_file << " files are read." << std::endl;
-	std::cout << "Number of NuMuCC: " << num_nu_mu_cc << std::endl;
 
-
-	//TLegend* legend = new TLegend(0.7,  0.7, 0.9, 0.9);
-	//legend -> AddEntry(mu_first_hist, "muon");
-	//legend -> AddEntry(pi_first_hist, "pion");
-
-	//TCanvas *c1 = new TCanvas("c1", "c1", 600, 600);
-	//TCanvas *c2 = new TCanvas("c2", "c2", 600, 600);
-	TCanvas *c3 = new TCanvas("c3", "c3", 600, 600);
-
-	//c1 -> cd();
-	//mu_first_hist -> GetYaxis() -> SetRangeUser(0, 60);
-	//mu_first_hist -> Draw();
-	//pi_first_hist -> SetLineColor(kRed);
-	//pi_first_hist -> Draw("SAME");
-	//legend -> Draw();
-
-	//c2 -> cd();
-	//mu_last_hist -> GetYaxis() -> SetRangeUser(0, 60);
-	//mu_last_hist -> Draw();
-	//pi_last_hist -> SetLineColor(kRed);
-	//pi_last_hist -> Draw("SAME");
-	//legend -> Draw();
+	TCanvas *c1 = new TCanvas("c1", "c1", 600, 600);
 
 	for (auto p: v_path) {
 		std::cout << p << std::endl;
@@ -225,18 +258,18 @@ int main() {
 
 	gStyle -> SetOptStat(0);
 	// cumulative histograms.
-	c3 -> cd();
-	int num_mu = mu_last_hist -> GetEntries();
-	int num_pi = pi_last_hist -> GetEntries();
+	c1 -> cd();
+	int num_mu = mu_hist -> GetEntries();
+	int num_pi = pi_hist -> GetEntries();
 
 	TH1 *mu_cum_hist;
 	TH1 *pi_cum_hist;
 
 	TLegend* cum_legend = new TLegend(0.7,  0.7, 0.9, 0.9);
-	mu_cum_hist = mu_last_hist -> GetCumulative(kFALSE);
-	pi_cum_hist = pi_last_hist -> GetCumulative(kFALSE);
-	//mu_cum_hist -> Scale(1./num_mu);
-	//pi_cum_hist -> Scale(1./num_pi);
+	mu_cum_hist = mu_hist -> GetCumulative(kFALSE);
+	pi_cum_hist = pi_hist -> GetCumulative(kFALSE);
+	mu_cum_hist -> Scale(1./num_mu);
+	pi_cum_hist -> Scale(1./num_pi);
 	mu_cum_hist -> SetTitle(";#plate;#tracks (a.u.)");
 	mu_cum_hist -> Draw();
 	pi_cum_hist -> SetLineColor(kRed);
@@ -245,10 +278,10 @@ int main() {
 
 	cum_legend -> AddEntry(mu_cum_hist, "Muon");
 	cum_legend -> AddEntry(pi_cum_hist, "Pion");
+	cum_legend -> Draw();
 
 
-	std::cout << "Number of muon penetrate 300 plate: " << mu_last_hist -> GetCumulative(kFALSE) -> GetBinContent(bin_max/2) << std::endl;
-	std::cout << "Number of pion penetrate 300 plate: " << pi_last_hist -> GetCumulative(kFALSE) -> GetBinContent(bin_max/2) << std::endl;
+	std::cout << "Number of muon: " << num_mu << std::endl;
 	std::cout << "Number of muon npl > 200: " << n_long_mu << std::endl;
 	std::cout << "Number of pion npl > 200: " << n_long_pi << std::endl;
 

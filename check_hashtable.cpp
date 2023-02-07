@@ -8,7 +8,7 @@
 
 #include <EdbDataSet.h>
 
-#include "HashTable3D.hpp"
+#include "HashTable.hpp"
 #include "Utils.hpp"
 
 int main() {
@@ -18,7 +18,7 @@ int main() {
 	EdbDataProc* dproc = new EdbDataProc;
 	EdbPVRec* pvr = new EdbPVRec;
 
-	dproc -> ReadTracksTree(*pvr, "./20221024_dset_TS_zone3_p171-210_finealign_p171-210_pm11000_from_pc36/linked_tracks.root");
+	dproc -> ReadTracksTree(*pvr, "20230107_nuall/evt_2503_pl1_300/linked_tracks.root");
 
 	int iplmax = -1e9;
 	int iplmin = 1e9;
@@ -52,17 +52,8 @@ int main() {
 	xmin -= 1; xmax += 1; ymin -= 1; ymax += 1;
 	printf("ipl %d - %d\n", iplmin, iplmax);
 
-	double cellsize = 20; // 50 micron
 
-	HashTable3D* hashtable = new HashTable3D(
-			pvr,
-			iplmax - iplmin + 1, iplmin - 0.5, iplmax + 0.5,
-			floor((xmax - xmin)/cellsize) + 1, xmin, xmax,
-			floor((ymax - ymin)/cellsize) + 1, ymin, ymax
-			);
-
-	hashtable -> fillCells(all_tracks);
-
+	HashTable* hashtable = new HashTable(pvr);
 
 	TObjArray* selected = new TObjArray;
 
@@ -72,20 +63,16 @@ int main() {
 
 	EdbTrackP* track;
 
-	track = pvr -> GetTrack(0);
+	track = pvr -> FindTrack(10650);
 	selected -> Add(track);
 
 
 	std::vector<EdbTrackP*> tracks;
 
-	double v[3];
-	v[0] = track -> GetSegmentLast() -> ScanID().GetPlate();
-	v[1] = track -> GetSegmentLast() -> X();
-	v[2] = track -> GetSegmentLast() -> Y();
 
 	double r[3] = {6.1, 20, 20};
 
-	tracks = hashtable -> GetNeighbors(v, r);
+	tracks = hashtable -> GetNeighbors(track);
 	for (int i=0; i<tracks.size(); i++) {
 		EdbTrackP* cand_track = tracks[i];
 

@@ -18,7 +18,7 @@ class HashTable {
 		HashTable(EdbPVRec* pvr);
 
 		// get around tracks.
-		std::vector<EdbTrackP*> GetNeighbors(EdbTrackP* track);
+		std::vector<EdbTrackP*> GetNeighbors(EdbTrackP* track, bool forward=true, bool backward=true);
 
 		void SortTracks();
 
