@@ -24,6 +24,7 @@ TH1D* pos_hist = new TH1D("pos", ";micron;counts", 25, 0, 100);
 TH1D* ang_hist = new TH1D("ang", ";mrad;counts", 25, 0, 10);
 TH2D* mom_ang_hist = new TH2D("mom ang", ";mrad;Mom (GeV)", 50, 0, 10, 100, 0, 2000);
 TH2D* pos_ang_hist = new TH2D("pos ang", ";micron;mrad", 50, 0, 100, 50, 0, 10);
+TH1D* broken_hist = new TH1D("broken place", ";plate;counts", 300, 0, 300);
 
 void initTruth(std::string filename) {
 
@@ -115,9 +116,10 @@ void make_hist(std::string path) {
 	}
 
 	std::sort(v_muons.begin(), v_muons.end(),
-			[] (const EdbTrackP* lhs, const EdbTrackP* rhs) {return lhs->GetSegmentFirst()->ScanID().GetPlate() > rhs->GetSegmentFirst()->ScanID().GetPlate();}
+			[] (const EdbTrackP* lhs, const EdbTrackP* rhs) {return lhs->GetSegmentFirst()->ScanID().GetPlate() < rhs->GetSegmentFirst()->ScanID().GetPlate();}
 			);
 
+	std::cout << "number of muon: " << v_muons.size() << std::endl;
 	for (int i=0; i<v_muons.size()-1; i++) {
 		EdbTrackP* prv_track = v_muons[i];
 		EdbTrackP* nxt_track = v_muons[i+1];
@@ -126,12 +128,14 @@ void make_hist(std::string path) {
 		double ang = Utils::Dtheta(prv_track, nxt_track)*1000;
 		double mom = prv_track -> GetSegmentFirst() -> P();
 
+		std::cout << "Broken at " << prv_track -> GetSegmentLast() -> ScanID().GetPlate() << std::endl;
 		std::cout << "distance: " << dist << " micron." << "\tangle: " << ang << " mrad" << "\tMom: " << mom << " GeV" << std::endl;
 
 		pos_hist -> Fill(dist);
 		ang_hist -> Fill(ang);
 		mom_ang_hist -> Fill(ang, mom);
 		pos_ang_hist -> Fill(dist, ang);
+		broken_hist -> Fill(prv_track -> GetSegmentLast() -> ScanID().GetPlate());
 	}
 
 	return;
@@ -161,6 +165,7 @@ int main() {
 	TCanvas* c2 = new TCanvas("c2", "c2", 600, 600);
 	TCanvas* c3 = new TCanvas("c3", "c3", 600, 600);
 	TCanvas* c4 = new TCanvas("c4", "c4", 600, 600);
+	TCanvas* c5 = new TCanvas("c5", "c5", 600, 600);
 
 	c1 -> cd();
 	pos_hist -> Draw();
@@ -174,6 +179,9 @@ int main() {
 
 	c4 -> cd();
 	pos_ang_hist -> Draw("COLZ");
+
+	c5 -> cd();
+	broken_hist -> Draw();
 
 	app.Run();
 

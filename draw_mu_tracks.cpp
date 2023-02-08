@@ -86,8 +86,8 @@ std::pair<TH1I*, TH2I*> make_hist(std::string path) {
 
 	EdbDataProc* dproc = new EdbDataProc;
 	EdbPVRec* pvr = new EdbPVRec;
-	//dproc -> ReadTracksTree(*pvr, path.c_str(), cut); // read linked_tracks with cut npl >= 200.
-	pvr = Utils::ConnectTrack(path);
+	dproc -> ReadTracksTree(*pvr, path.c_str(), cut); // read linked_tracks with cut npl >= 200.
+	//pvr = Utils::ConnectTrack(path);
 
 	// specify event ID from file name.
 	int event_id = 0;
@@ -175,7 +175,7 @@ int main() {
 		num_file ++;
 	}
 
-	std::ofstream ofs("broken_muon.csv");
+	//std::ofstream ofs("broken_muon.csv");
 
 	std::cout << "========================================" << std::endl;
 	std::cout << "Number of event include muon whose npl < 200 but which is not duplicated: " << s_u200nodup.size() << std::endl;
@@ -187,7 +187,7 @@ int main() {
 	std::cout << "Number of event include duplicated muon track: " << s_dupl.size() << std::endl;
 	for (auto p: s_dupl) {
 		std::cout << p << std::endl;
-		ofs << p << std::endl;
+		//ofs << p << std::endl;
 	}
 	std::cout << "========================================" << std::endl;
 

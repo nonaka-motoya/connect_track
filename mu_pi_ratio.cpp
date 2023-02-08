@@ -81,55 +81,6 @@ bool isTrack(EdbTrackP* track) {
 	return true;
 }
 
-void track_length_hist(EdbPVRec* pvr, int event_id, TH1D* mu_hist, TH1D* pi_hist) {
-	std::cout << "Event : " << event_id << std::endl;
-
-	std::map<int, std::vector<EdbTrackP*>> primary_muons; // <trackID, EdbTrack>.
-	std::map<int, std::vector<EdbTrackP*>> primary_pions; // <trackID, EdbTrack>.
-
-	for (int i=0; i<pvr->Ntracks(); i++) {
-		EdbTrackP* track = pvr -> GetTrack(i);
-
-		int pdg_id = track -> GetSegmentFirst() -> MCTrack();
-		int track_id = track -> GetSegmentFirst() -> Volume();
-
-		if (!isTrack(track)) continue;
-
-		if (event_id != track -> GetSegmentFirst() -> MCEvt()) continue;
-
-		if (abs(track -> GetSegmentFirst() -> MCTrack()) == 13 and Utils::IsOutgo(track, pvr)) return;
-
-		if (abs(pdg_id)==13) {
-			primary_muons[track_id].push_back(track);
-			//if (track -> Npl() < 3) Utils::PrintTrack(track);
-			if (track -> Npl() > 200) {
-				n_long_mu ++;
-			} else {
-				//v_path.push_back(path);
-			}
-		} else if (abs(pdg_id) == 211) {
-			primary_pions[track_id].push_back(track);
-			if (track -> Npl() > 200) n_long_pi ++;
-		}
-	}
-
-	for (auto iter: primary_muons) {
-		std::vector<EdbTrackP*> tracks = iter.second;
-		std::sort(tracks.begin(), tracks.end(),
-				[](EdbTrackP* lhs, EdbTrackP* rhs) { return lhs -> GetSegmentFirst() -> PID() < rhs -> GetSegmentFirst() -> PID(); });
-		mu_hist -> Fill(tracks.front() -> Npl());
-	}
-
-	for (auto iter: primary_pions) {
-		std::vector<EdbTrackP*> tracks = iter.second;
-		std::sort(tracks.begin(), tracks.end(),
-				[](EdbTrackP* lhs, EdbTrackP* rhs) { return lhs -> GetSegmentFirst() -> PID() < rhs -> GetSegmentFirst() -> PID(); });
-		pi_hist -> Fill(tracks.front() -> Npl());
-	}
-
-
-	return ;
-}
 
 void make_mu_hist(EdbPVRec* pvr, int event_id, TH1D* mu_hist) {
 
@@ -146,6 +97,8 @@ void make_mu_hist(EdbPVRec* pvr, int event_id, TH1D* mu_hist) {
 		if (event_id != track -> GetSegmentFirst() -> MCEvt()) continue;
 
 		if (abs(track -> GetSegmentFirst() -> MCTrack()) == 13 and Utils::IsOutgo(track, pvr)) return;
+
+		if (Utils::HasKink(track)) continue;
 
 		if (abs(pdg_id)==13) {
 			primary_muons[track_id].push_back(track);
@@ -182,6 +135,8 @@ void make_pi_hist(EdbPVRec* pvr, int event_id, TH1D* pi_hist) {
 		if (!isTrack(track)) continue;
 
 		if (event_id != track -> GetSegmentFirst() -> MCEvt()) continue;
+
+		if (Utils::HasKink(track)) continue;
 
 		if (abs(pdg_id) == 211) {
 			primary_pions[track_id].push_back(track);
@@ -225,26 +180,26 @@ int main() {
 	std::string line_buf;
 	int num_file = 0;
 
+	EdbDataProc* dproc = new EdbDataProc;
+	EdbPVRec* pvr = new EdbPVRec;
+
 	// read linked_tracks.root
 	while (std::getline(input_file, line_buf)) {
 		std::string path = line_buf + "/linked_tracks.root"; // path of linked_tracks.
-
-		EdbDataProc* dproc = new EdbDataProc;
-		EdbPVRec* pvr = new EdbPVRec;
 
 		// specify event ID.
 		int event_id = 0;
 		sscanf(path.c_str(), "20230107_nuall/evt_%d", &event_id);
 		event_id += 100000;
-		//dproc -> ReadTracksTree(*pvr, path.c_str(), cut); // read linked_tracks with cut npl >= 200.
-		
-		pvr = Utils::ConnectTrack(path);
+		dproc -> ReadTracksTree(*pvr, path.c_str(), cut); // read linked_tracks with cut npl >= 200.
+		//pvr = Utils::ConnectTrack(path, 70, 0.007);
 	
 
 		//track_length_hist(pvr, event_id, mu_hist, pi_hist);
 		make_mu_hist(pvr, event_id, mu_hist);
 		make_pi_hist(pvr, event_id, pi_hist);
 		num_file ++;
+		if (pvr->eTracks) pvr -> eTracks -> Clear();
 	}
 
 	std::cout << "numeber of uniqueID: " << uniqueID.size() << std::endl;
@@ -274,7 +229,9 @@ int main() {
 	mu_cum_hist -> Draw();
 	pi_cum_hist -> SetLineColor(kRed);
 	pi_cum_hist -> Draw("SAME");
-	cum_legend -> Draw();
+
+	mu_cum_hist -> GetXaxis() -> SetRangeUser(0, 200);
+	mu_cum_hist -> GetYaxis() -> SetRangeUser(0, 1.4);
 
 	cum_legend -> AddEntry(mu_cum_hist, "Muon");
 	cum_legend -> AddEntry(pi_cum_hist, "Pion");
@@ -282,8 +239,8 @@ int main() {
 
 
 	std::cout << "Number of muon: " << num_mu << std::endl;
-	std::cout << "Number of muon npl > 200: " << n_long_mu << std::endl;
-	std::cout << "Number of pion npl > 200: " << n_long_pi << std::endl;
+	std::cout << "Number of muon npl > 200: " << mu_cum_hist -> GetBinContent(101) << std::endl;
+	std::cout << "Number of pion npl > 200: " << pi_cum_hist -> GetBinContent(101) << std::endl;
 
 
 	app.Run();

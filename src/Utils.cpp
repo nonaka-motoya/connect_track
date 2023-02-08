@@ -256,7 +256,7 @@ void add_tracks(EdbTrackP *track1, EdbTrackP *track2) {
 }
 
 
-EdbPVRec *Utils::ConnectTrack(std::string path) {
+EdbPVRec *Utils::ConnectTrack(std::string path, double distance, double angle) {
 
 	EdbPVRec *connected_pvr = new EdbPVRec;
 	
@@ -271,6 +271,7 @@ EdbPVRec *Utils::ConnectTrack(std::string path) {
 	HashTable *hashtable = new HashTable(pvr); // hashtable of EdbTrackP.
 	
 	std::vector<int> removed_track_id; // track ID which should be removed.
+	std::map<int, int> connected_pdg;
 
 	for (int i=0; i<pvr->Ntracks(); i++) {
 		EdbTrackP *track = pvr -> GetTrack(i);
@@ -278,12 +279,12 @@ EdbPVRec *Utils::ConnectTrack(std::string path) {
 		// if track should be removed -> skip.
 		int track_id = track-> GetSegmentFirst() -> Track();
 		if (std::find(removed_track_id.begin(), removed_track_id.end(), track_id) != removed_track_id.end()) continue;
-		std::cout << "target track ID: " << track_id << std::endl;
+		//std::cout << "target track ID: " << track_id << std::endl;
 
 		while (1) {
 			// get neipghbor tracks.
 			std::vector<EdbTrackP*> v_tracks = hashtable -> GetNeighbors(track);
-			std::cout << "Number of neighbor tracks: " << v_tracks.size() << std::endl;
+			//std::cout << "Number of neighbor tracks: " << v_tracks.size() << std::endl;
 
 			// if neighbor track does not exist -> break.
 			if (v_tracks.size() == 0) break;
@@ -306,7 +307,7 @@ EdbPVRec *Utils::ConnectTrack(std::string path) {
 				double delta_theta = Utils::Dtheta(track, cand_track);
 				double dist = Utils::Distance(track, cand_track);
 
-				if (!isDuplicate(track, cand_track) and delta_theta < 0.007 and dist < 70) {
+				if (!isDuplicate(track, cand_track) and delta_theta < angle and dist < distance) {
 
 					// fill vector of tracks which are to be connected.
 					// after connecting this track, need to remove this track from pvr.
@@ -320,31 +321,37 @@ EdbPVRec *Utils::ConnectTrack(std::string path) {
 				break;
 			} else if (v_tbc_tracks.size() == 1) {
 				add_tracks(track, v_tbc_tracks.front());
+				int pdg_id = track -> GetSegmentFirst() -> MCTrack();
+				if (connected_pdg.find(pdg_id) == connected_pdg.end()) {
+					connected_pdg[pdg_id] = 1;
+				} else {
+					connected_pdg[pdg_id]++;
+				}
 				removed_track_id.push_back(track -> GetSegmentFirst() -> Track());
 				removed_track_id.push_back(v_tbc_tracks.front() -> GetSegmentFirst() -> Track());
-				//track -> PrintNice();
 			} else {
 				int index = get_min_chi_index(track, v_tbc_tracks);
 				add_tracks(track, v_tbc_tracks[index]);
+				int pdg_id = track -> GetSegmentFirst() -> MCTrack();
+				if (connected_pdg.find(pdg_id) == connected_pdg.end()) {
+					connected_pdg[pdg_id] = 1;
+				} else {
+					connected_pdg[pdg_id]++;
+				}
 				removed_track_id.push_back(track -> GetSegmentFirst() -> Track());
 				removed_track_id.push_back(v_tbc_tracks[index] -> GetSegmentFirst() -> Track());
 			}
 		}
 
-		std::cout << "Add " << track -> GetSegmentFirst() -> Track() << std::endl; 
+		//std::cout << "Add " << track -> GetSegmentFirst() -> Track() << std::endl; 
 		connected_pvr  -> AddTrack(track);
 	}
 
 	dproc -> MakeTracksTree(connected_pvr, "connect_tracks.root");
 
-	// check pvr
-	//pvr -> PrintSummary();
-	//for (int i=0; i<pvr->Ntracks(); i++) {
-	//	EdbTrackP *track = pvr -> GetTrack(i);
-	//	if (track -> GetSegmentFirst() -> MCTrack() == 13) {
-	//		track -> PrintNice();
-	//	}
-	//}
+	for (auto iter: connected_pdg) {
+		std::cout << "PDG ID: " << iter.first << "\tNumber of connection: " << iter.second << std::endl;
+	}
 
 	return connected_pvr;
 }
@@ -376,8 +383,8 @@ bool Utils::IsOutgo(EdbTrackP *track, EdbPVRec *pvr) {
 
 	}
 
-	std::cout << "ipl " << ipl_min << " - " << ipl_max << std::endl;
-	std::cout << "X: (" << xmax << ", " << xmin << ")\tY: (" << ymax << ", " << ymin << ")" << std::endl;
+	//std::cout << "ipl " << ipl_min << " - " << ipl_max << std::endl;
+	//std::cout << "X: (" << xmax << ", " << xmin << ")\tY: (" << ymax << ", " << ymin << ")" << std::endl;
 	
 	if (track -> GetSegmentLast() -> ScanID().GetPlate() == ipl_max) return false;
 
@@ -406,10 +413,20 @@ bool Utils::IsOutgo(EdbTrackP *track, EdbPVRec *pvr) {
 	x += tx * z;
 	y += ty * z;
 
-	std::cout << "X: " << x << "\tY: " << y << std::endl;
+	//std::cout << "X: " << x << "\tY: " << y << std::endl;
 
 	if (x > xmax or x < xmin or y > ymax or y < ymin) return true;
 	
-	std::cout << "Do not outgo" << std::endl;
+	//std::cout << "Do not outgo" << std::endl;
+	return false;
+}
+
+bool Utils::HasKink(EdbTrackP *track) {
+	for (int i=4; i<track->N()-2; i++) {
+		double dtheta = Utils::CalcTrackAngleDiff(track, i);
+
+		if (dtheta > 2.5) return true;
+	}
+
 	return false;
 }
