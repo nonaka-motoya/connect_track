@@ -1,96 +1,110 @@
 #include "HashTable.hpp"
+#include <algorithm>
 #include <cmath>
+#include <iterator>
 #include <vector>
+#include <numeric>
+
+#include <EdbEDAUtil.h>
 
 HashTable::HashTable(EdbPVRec* pvr) {
 	m_pvr = pvr;
 
-	double xmax = -1e8;
-	double ymax = -1e8;
-	double pmax = -1e8;
-	double xmin = 1e8;
-	double ymin = 1e8;
-	double pmin = 1e8;
-
 	for (int i=0; i<m_pvr->Ntracks(); i++) {
 		EdbTrackP *track = m_pvr -> GetTrack(i);
-		for (int j=0; j<track->N(); j++) {
-			EdbSegP *seg = track -> GetSegment(j);
 
-			double x = seg -> X();
-			double y = seg -> Y();
-			int plate = seg -> ScanID().GetPlate();
-
-			if (pmin > plate) pmin = plate;
-			if (pmax < plate) pmax = plate;
-			if (xmin > x) xmin = x;
-			if (xmax < x) xmax = x;
-			if (ymin > y) ymin = y;
-			if (ymax < y) ymax = y;
-		}
+		m_tracks_f.push_back(track);
+		m_tracks_l.push_back(track);
 	}
 
-	int cellsize = 20;
-	int nx = floor((xmax - xmin)/cellsize);
-	int ny = floor((ymax - ymin)/cellsize);
-	int npl = pmax - pmin + 1;
+	std::cout << m_tracks_f.size() << " tracks are read." << std::endl;
 
-	m_n[0] = nx;
-	m_n[1] = ny;
-	m_n[2] = npl;
-	m_div[0] = (xmax - xmin)/nx;
-	m_div[1] = (ymax - ymin)/ny;
-	m_div[2] = (pmax - pmin)/npl;
-	m_vmin[0] = xmin;
-	m_vmin[1] = ymin;
-	m_vmin[2] = pmin - 0.5;
-	m_vmax[0] = xmax;
-	m_vmax[1] = ymax;
-	m_vmax[2] = pmax + 0.5;
+	std::cout << "Sort tracks with plate." << std::endl;
+	SortTracks();
 }
 
-std::vector<EdbTrackP*> HashTable::GetNeighbors(EdbTrackP *track) {
-	std::vector<EdbTrackP*> v_tracks;
+bool CompareFirstPlate(const EdbTrackP* track1, const EdbTrackP* track2) {
+	return track1->GetSegmentFirst()->ScanID().GetPlate() < track2->GetSegmentFirst()->ScanID().GetPlate();
+}
+
+bool CompareLastPlate(const EdbTrackP* track1, const EdbTrackP* track2) {
+	return track1->GetSegmentLast()->ScanID().GetPlate() < track2->GetSegmentLast()->ScanID().GetPlate();
+}
+
+void HashTable::SortTracks() {
+	std::sort(m_tracks_f.begin(), m_tracks_f.end(), CompareFirstPlate);
+	std::sort(m_tracks_l.begin(), m_tracks_l.end(), CompareLastPlate);
+
+	std::cout << "First plate: " << m_tracks_f.front()->GetSegmentFirst()->ScanID().GetPlate() << "\tLast plate: " << m_tracks_l.back()->GetSegmentLast()->ScanID().GetPlate() << std::endl;
+}
+
+
+std::vector<EdbTrackP*> HashTable::GetNeighbors(EdbTrackP* track, bool forward, bool backward) {
+	std::vector<EdbTrackP*> tracks;
 	double l_x = track -> GetSegmentLast() -> X();
 	double l_y = track -> GetSegmentLast() -> Y();
 	double f_x = track -> GetSegmentFirst() -> X();
 	double f_y = track -> GetSegmentFirst() -> Y();
-	int f_plate = track -> GetSegmentFirst() -> ScanID().GetPlate();
-	int l_plate = track -> GetSegmentLast() -> ScanID().GetPlate();
 
-	for (int i=0; i<m_pvr->Ntracks(); i++) {
-		EdbTrackP *track_buf = m_pvr -> GetTrack(i);
-		EdbSegP *f_seg = track_buf -> GetSegmentFirst();
-		EdbSegP *l_seg = track_buf -> GetSegmentLast();
+	int nseg = track -> N();
+	EdbSegP* f_seg = track -> GetSegment(1);
+	EdbSegP* l_seg = track -> GetSegment(nseg-1);
 
-		// search with plate.
-		int f_can_plate = f_seg -> ScanID().GetPlate();
-		int l_can_plate = l_seg -> ScanID().GetPlate();
-		if (abs(l_plate - f_can_plate) <= 6) {
+	//f_x -= 1000 * track -> GetSegmentFirst() -> TX();
+	//f_y -= 1000 * track -> GetSegmentFirst() -> TY();
+	//l_x += 1000 * track -> GetSegmentLast() -> TX();
+	//l_y += 1000 * track -> GetSegmentLast() -> TY();
 
-			double f_can_x = f_seg -> X();
-			double f_can_y = f_seg -> Y();
+	int plate = track -> GetSegmentLast() -> ScanID().GetPlate();
 
-			//std::cout << "track ID: " << track -> GetSegmentFirst() -> Track() << "\tcand track ID: " << track_buf -> GetSegmentFirst() -> Track() << "\tdx: " << abs(x-f_x) << std::endl;
-			
-			
-			// search with x, y
-			if (abs(l_x - f_can_x) < 100 and abs(l_y - f_can_y) < 100) {
-				//std::cout << "last track: " << f_seg -> Track() << std::endl;
-				v_tracks.push_back(track_buf);
-			}
-		} else if (abs(f_plate - l_can_plate) <= 6) {
+	int dpl = 10;
 
-			double l_can_x = l_seg -> X();
-			double l_can_y = l_seg -> Y();
+	// forward tracks.
+	if (forward) {
+		std::vector<EdbTrackP*>::iterator iter_lower = std::lower_bound(m_tracks_f.begin(), m_tracks_f.end(), track,
+				[&](const EdbTrackP* track1, EdbTrackP* track2) { return track1->GetSegmentFirst()->ScanID().GetPlate() < track2->GetSegmentLast()->ScanID().GetPlate() - dpl; }
+				);
+
+		std::vector<EdbTrackP*>::iterator iter_upper = std::lower_bound(m_tracks_f.begin(), m_tracks_f.end(), track,
+				[&](const EdbTrackP* track1, EdbTrackP* track2) { return track1->GetSegmentFirst()->ScanID().GetPlate() < track2->GetSegmentLast()->ScanID().GetPlate() + dpl; }
+				);
+
+		int idx_lower = std::distance(m_tracks_f.begin(), iter_lower);
+		int idx_upper = std::distance(m_tracks_f.begin(), iter_upper);
 
 
-			if (abs(f_x - l_can_x) < 100 and abs(f_y - l_can_y) < 100) {
-				//std::cout << "front track: " << f_seg -> Track() << std::endl;
-				v_tracks.push_back(track_buf);
-			}
+		for (int i=idx_lower; i<idx_upper; i++) {
+			EdbSegP* cand_f_seg = m_tracks_f[i] -> GetSegment(1);
+			double dmin = EdbEDAUtil::CalcDmin(l_seg, cand_f_seg);
+			if (dmin > 50) continue;
+			if (track -> GetSegmentFirst() -> ID() == m_tracks_f[i] -> GetSegmentFirst() -> ID()) continue;
+			tracks.push_back(m_tracks_f[i]);
 		}
 	}
 
-	return v_tracks;
+	
+	// backward tracks.
+	if (backward) {
+		std::vector<EdbTrackP*>::iterator iter_lower = std::lower_bound(m_tracks_l.begin(), m_tracks_l.end(), track,
+				[&](const EdbTrackP* track1, EdbTrackP* track2) { return track1->GetSegmentLast()->ScanID().GetPlate() < track2->GetSegmentFirst()->ScanID().GetPlate() - dpl; }
+				);
+
+		std::vector<EdbTrackP*>::iterator iter_upper = std::lower_bound(m_tracks_l.begin(), m_tracks_l.end(), track,
+				[&](const EdbTrackP* track1, EdbTrackP* track2) { return track1->GetSegmentLast()->ScanID().GetPlate() < track2->GetSegmentFirst()->ScanID().GetPlate() + dpl; }
+				);
+
+		int idx_lower = std::distance(m_tracks_l.begin(), iter_lower);
+		int idx_upper = std::distance(m_tracks_l.begin(), iter_upper);
+
+		for (int i=idx_lower; i<idx_upper; i++) {
+			int cand_nseg = m_tracks_l[i] -> N();
+			EdbSegP* cand_l_seg = m_tracks_l[i] -> GetSegment(cand_nseg-1);
+			double dmin = EdbEDAUtil::CalcDmin(f_seg, cand_l_seg);
+			if (dmin > 50) continue;
+			if (track -> GetSegmentFirst() -> ID() == m_tracks_l[i] -> GetSegmentFirst() -> ID()) continue;
+			tracks.push_back(m_tracks_l[i]);
+		}
+	}
+
+	return tracks;
 }

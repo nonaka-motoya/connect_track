@@ -20,7 +20,13 @@ class Utils {
 		// fit x-z (y-z) space using segments in [i-3, i-1] and [i, i+2].
 		static double CalcTrackAngleDiff(EdbTrackP* track, int index);
 
-		static EdbPVRec *ConnectTrack(std::string path);
+		static EdbPVRec *ConnectTrack(std::string path, double distance, double angle, TCut cut="");
+		static std::pair<double, double> Theta(EdbTrackP *track);
+		static double Dtheta(EdbTrackP *track1, EdbTrackP *track2);
+		static EdbSegP *MakeVirtualSegment(EdbTrackP *track);
+		static double Distance(EdbTrackP *track1, EdbTrackP *track2);
+		static bool IsOutgo(EdbTrackP* track, EdbPVRec* pvr);
+		static int HasKink(EdbTrackP* track);
 };
 
 
