@@ -9,6 +9,7 @@
 #include "TRint.h"
 #include "TCut.h"
 #include "TObjArray.h"
+#include "TStyle.h"
 
 #include "EdbDataSet.h"
 
@@ -25,7 +26,7 @@ std::set<std::string> s_dupl; // event include muon whose npl is smaller than 20
 TH1D* pos_hist = new TH1D("pos", ";micron;counts", 25, 0, 100);
 TH1D* ang_hist = new TH1D("ang", ";mrad;counts", 100, 0, 100);
 TH1I* pdg_hist = new TH1I("pdg", ";pdg;count", 600, -300, 300);
-TH2D* pos_ang_hist = new TH2D("pos ang", ";micron;mrad", 50, 0, 100, 50, 0, 10);
+TH2D* pos_ang_hist = new TH2D("pos ang", ";micron;mrad", 50, 0, 50, 50, 0, 5);
 
 void initTruth(std::string filename, int tree_number) {
 
@@ -140,16 +141,23 @@ void make_hist(std::string path) {
 		auto secondary_iter = secondary_tracks.find(event_id);
 		if (secondary_iter != secondary_tracks.end()) {
 			std::vector<EdbTrackP*> cand_tracks = secondary_iter -> second;
+			double min_dist = 1e9;
+			double min_dtheta = 1e9;
 			for (int i=0; i<cand_tracks.size(); i++) {
 				EdbTrackP* cand_track = cand_tracks[i];
 				
 				double dist = Utils::Distance(track, cand_track);
 				double dth = Utils::Dtheta(track, cand_track)*1000;
 
-				pos_hist -> Fill(dist);
-				ang_hist -> Fill(dth);
-				pos_ang_hist -> Fill(dist, dth);
+				if (dth < min_dtheta) {
+					min_dist = dist;
+					min_dtheta = dth;
+				}
+
 			}
+			pos_hist -> Fill(min_dist);
+			ang_hist -> Fill(min_dtheta);
+			pos_ang_hist -> Fill(min_dist, min_dtheta);
 		}
 	}
 
@@ -170,8 +178,8 @@ void make_hist(std::string path) {
 int main() {
 
 	for (int i=0; i<1; i++) {
-	//std::string filename = Form("100032/ntp/s0008/FaserMC-MC22_PG_pion_in_fasernu_100GeV-100032-0000%d-s0008-NTUP.root", i);
-	std::string filename = Form("100033/ntp/s0008/FaserMC-MC22_PG_pion_in_fasernu_300GeV-100033-0000%d-s0008-NTUP.root", i);
+	std::string filename = Form("100032/ntp/s0008/FaserMC-MC22_PG_pion_in_fasernu_100GeV-100032-0000%d-s0008-NTUP.root", i);
+	//std::string filename = Form("100033/ntp/s0008/FaserMC-MC22_PG_pion_in_fasernu_300GeV-100033-0000%d-s0008-NTUP.root", i);
 		initTruth(filename, i);
 	}
 
@@ -205,7 +213,10 @@ int main() {
 	pdg_hist -> Draw();
 
 	c4 -> cd();
-	pos_ang_hist -> Draw("COLZ");
+	pos_ang_hist -> SetMarkerStyle(8);
+	pos_ang_hist -> Draw();
+
+	gStyle -> SetOptStat(0);
 
 	app.Run();
 

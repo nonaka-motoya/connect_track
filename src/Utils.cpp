@@ -256,15 +256,14 @@ void add_tracks(EdbTrackP *track1, EdbTrackP *track2) {
 }
 
 
-EdbPVRec *Utils::ConnectTrack(std::string path, double distance, double angle) {
+EdbPVRec *Utils::ConnectTrack(std::string path, double distance, double angle, TCut cut) {
 
 	EdbPVRec *connected_pvr = new EdbPVRec;
-	
 
 	// read linked_tracks.root.
 	EdbDataProc* dproc = new EdbDataProc;
 	EdbPVRec* pvr = new EdbPVRec;
-	dproc -> ReadTracksTree(*pvr, path.c_str(), "nseg>3");
+	dproc -> ReadTracksTree(*pvr, path.c_str(), cut);
 
 	// create HashTable
 	std::cout << "Fill HashTable." << std::endl;
@@ -421,12 +420,27 @@ bool Utils::IsOutgo(EdbTrackP *track, EdbPVRec *pvr) {
 	return false;
 }
 
-bool Utils::HasKink(EdbTrackP *track) {
+// if kink is detected -> return npl
+// else -> return -1
+int Utils::HasKink(EdbTrackP *track) {
+	bool has_kink = false;
+	int npl;
+	int first_plate = track -> GetSegmentFirst() -> ScanID().GetPlate();
+
 	for (int i=4; i<track->N()-2; i++) {
 		double dtheta = Utils::CalcTrackAngleDiff(track, i);
-
-		if (dtheta > 2.5) return true;
+		if (dtheta > 4) {
+			has_kink = true;
+			int last_plate = track -> GetSegment(i) -> ScanID().GetPlate();
+			npl = last_plate - first_plate;
+			break;
+		}
 	}
 
-	return false;
+	if (has_kink) {
+		return npl;
+	} else {
+		return -1;
+	}
+
 }

@@ -16,7 +16,7 @@ bool isMuonOutgo(std::string path) {
 	EdbDataProc* dproc = new EdbDataProc;
 	EdbPVRec* pvr = new EdbPVRec;
 
-	dproc -> ReadTracksTree(*pvr, path.c_str(), "");
+	dproc -> ReadTracksTree(*pvr, path.c_str(), "t.eP>20");
 
 	for (int i=0; i<pvr->Ntracks(); i++) {
 		EdbTrackP* track = pvr -> GetTrack(i);

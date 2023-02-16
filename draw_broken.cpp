@@ -11,7 +11,7 @@
 #include "Utils.hpp"
 #include "EdbDataSet.h"
 
-TCut cut = "nseg>3";
+TCut cut = "nseg>3&&t.eP>20";
 
 std::map<int, std::vector<int>> uniqueID; // <evend ID, array(track_id)>.
 std::set<std::string> s_u200nodup; // event include muon whose npl is smaller than 200 but which is not duplicated.
@@ -23,7 +23,7 @@ EdbPVRec* pvr = new EdbPVRec;
 TH1D* pos_hist = new TH1D("pos", ";micron;counts", 25, 0, 100);
 TH1D* ang_hist = new TH1D("ang", ";mrad;counts", 25, 0, 10);
 TH2D* mom_ang_hist = new TH2D("mom ang", ";mrad;Mom (GeV)", 50, 0, 10, 100, 0, 2000);
-TH2D* pos_ang_hist = new TH2D("pos ang", ";micron;mrad", 50, 0, 100, 50, 0, 10);
+TH2D* pos_ang_hist = new TH2D("pos ang", ";micron;mrad", 50, 0, 50, 50, 0, 5);
 TH1D* broken_hist = new TH1D("broken place", ";plate;counts", 300, 0, 300);
 
 void initTruth(std::string filename) {
@@ -120,6 +120,7 @@ void make_hist(std::string path) {
 			);
 
 	std::cout << "number of muon: " << v_muons.size() << std::endl;
+	if (v_muons.size() == 0) return;
 	for (int i=0; i<v_muons.size()-1; i++) {
 		EdbTrackP* prv_track = v_muons[i];
 		EdbTrackP* nxt_track = v_muons[i+1];
@@ -178,10 +179,13 @@ int main() {
 	mom_ang_hist -> Draw();
 
 	c4 -> cd();
-	pos_ang_hist -> Draw("COLZ");
+	pos_ang_hist -> SetMarkerStyle(8);
+	pos_ang_hist -> Draw();
 
 	c5 -> cd();
 	broken_hist -> Draw();
+
+	gStyle -> SetOptStat(0);
 
 	app.Run();
 

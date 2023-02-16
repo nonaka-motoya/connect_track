@@ -10,7 +10,7 @@
 #include "Utils.hpp"
 #include "EdbDataSet.h"
 
-TCut cut = "nseg>3";
+TCut cut = "nseg>3&&t.eP>20";
 
 std::map<int, std::vector<int>> uniqueID; // <evend ID, array(track_id)>.
 std::set<std::string> s_u200nodup; // event include muon whose npl is smaller than 200 but which is not duplicated.
@@ -120,7 +120,7 @@ std::pair<TH1I*, TH2I*> make_hist(std::string path) {
 
 		if (npl>200) over200 = true;
 
-		if (abs(f_pdg_id) == 13 and abs(c_pdg_id)==13) {
+		if (abs(f_pdg_id) == 13 and abs(c_pdg_id)==13 and !Utils::IsOutgo(track, pvr)) {
 			auto iter = mu_num_duplicate_tracks.find(track_id);
 
 			// if track is not found.

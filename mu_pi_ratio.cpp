@@ -3,6 +3,7 @@
 #include <limits>
 #include <ostream>
 #include <sstream>
+#include <string>
 
 #include "EdbPVRec.h"
 #include "Rtypes.h"
@@ -17,7 +18,8 @@
 #include "Utils.hpp"
 
 int bin_max = 310;
-TCut cut = "nseg>3";
+TCut cut = "nseg>3&&t.eP>20";
+//TCut cut = "t.eP>20";
 int n_long_mu = 0;
 int n_long_pi = 0;
 std::vector<std::string> v_path;
@@ -98,7 +100,6 @@ void make_mu_hist(EdbPVRec* pvr, int event_id, TH1D* mu_hist) {
 
 		if (abs(track -> GetSegmentFirst() -> MCTrack()) == 13 and Utils::IsOutgo(track, pvr)) return;
 
-		if (Utils::HasKink(track)) continue;
 
 		if (abs(pdg_id)==13) {
 			primary_muons[track_id].push_back(track);
@@ -106,18 +107,30 @@ void make_mu_hist(EdbPVRec* pvr, int event_id, TH1D* mu_hist) {
 			if (track -> Npl() > 200) {
 				n_long_mu ++;
 			} else {
-				//v_path.push_back(path);
+				//v_path.push_back(std::to_string(event_id));
 			}
 		}
 	}
 
+	int plate_buf;
 	for (auto iter: primary_muons) {
 		std::vector<EdbTrackP*> tracks = iter.second;
 		std::sort(tracks.begin(), tracks.end(),
 				[](EdbTrackP* lhs, EdbTrackP* rhs) { return lhs -> GetSegmentFirst() -> PID() < rhs -> GetSegmentFirst() -> PID(); });
-		mu_hist -> Fill(tracks.front() -> Npl());
-	}
 
+		int plate = Utils::HasKink(tracks.front());
+		if (plate != -1) {
+			v_path.push_back(std::to_string(event_id));
+			std::cout << "Kink at " << plate << std::endl;
+			mu_hist -> Fill(plate);
+			continue;
+		} else {
+			mu_hist -> Fill(tracks.front() -> Npl());
+		}
+
+
+		//mu_hist -> Fill(tracks.front() -> Npl());
+	}
 	return ;
 }
 
@@ -136,7 +149,8 @@ void make_pi_hist(EdbPVRec* pvr, int event_id, TH1D* pi_hist) {
 
 		if (event_id != track -> GetSegmentFirst() -> MCEvt()) continue;
 
-		if (Utils::HasKink(track)) continue;
+		//if (abs(track -> GetSegmentFirst() -> MCTrack()) == 211 and Utils::IsOutgo(track, pvr)) continue;
+
 
 		if (abs(pdg_id) == 211) {
 			primary_pions[track_id].push_back(track);
@@ -144,11 +158,22 @@ void make_pi_hist(EdbPVRec* pvr, int event_id, TH1D* pi_hist) {
 		}
 	}
 
+	int plate_buf;
 	for (auto iter: primary_pions) {
 		std::vector<EdbTrackP*> tracks = iter.second;
 		std::sort(tracks.begin(), tracks.end(),
 				[](EdbTrackP* lhs, EdbTrackP* rhs) { return lhs -> GetSegmentFirst() -> PID() < rhs -> GetSegmentFirst() -> PID(); });
-		pi_hist -> Fill(tracks.front() -> Npl());
+		int plate = Utils::HasKink(tracks.front());
+		if (plate != -1) {
+			pi_hist -> Fill(plate);
+			std::cout << "Kink at " << plate << std::endl;
+			continue;
+		} else {
+			pi_hist -> Fill(tracks.front() -> Npl());
+		}
+
+
+		//pi_hist -> Fill(tracks.front() -> Npl());
 	}
 
 
@@ -169,8 +194,8 @@ int main() {
 	title += ";#plate;#tracks";
 	title = ";#plate;#tracks";
 
-	TH1D *mu_hist = new TH1D("mu hist", title.c_str(), bin_max/2, 0, bin_max);
-	TH1D *pi_hist = new TH1D("pi hist", title.c_str(), bin_max/2, 0, bin_max);
+	TH1D *mu_hist = new TH1D("mu hist", "", bin_max/2, 0, bin_max);
+	TH1D *pi_hist = new TH1D("pi hist", "", bin_max/2, 0, bin_max);
 	
 	// buffer of histograms
 	std::vector<TH1D*> hist_buf;
@@ -191,8 +216,8 @@ int main() {
 		int event_id = 0;
 		sscanf(path.c_str(), "20230107_nuall/evt_%d", &event_id);
 		event_id += 100000;
-		dproc -> ReadTracksTree(*pvr, path.c_str(), cut); // read linked_tracks with cut npl >= 200.
-		//pvr = Utils::ConnectTrack(path, 70, 0.007);
+		//dproc -> ReadTracksTree(*pvr, path.c_str(), cut); // read linked_tracks with cut npl >= 200.
+		pvr = Utils::ConnectTrack(path, 70, 0.007);
 	
 
 		//track_length_hist(pvr, event_id, mu_hist, pi_hist);
@@ -225,7 +250,7 @@ int main() {
 	pi_cum_hist = pi_hist -> GetCumulative(kFALSE);
 	mu_cum_hist -> Scale(1./num_mu);
 	pi_cum_hist -> Scale(1./num_pi);
-	mu_cum_hist -> SetTitle(";#plate;#tracks (a.u.)");
+	mu_cum_hist -> SetTitle("");
 	mu_cum_hist -> Draw();
 	pi_cum_hist -> SetLineColor(kRed);
 	pi_cum_hist -> Draw("SAME");
@@ -239,6 +264,7 @@ int main() {
 
 
 	std::cout << "Number of muon: " << num_mu << std::endl;
+	std::cout << "Number of pion: " << num_pi << std::endl;
 	std::cout << "Number of muon npl > 200: " << mu_cum_hist -> GetBinContent(101) << std::endl;
 	std::cout << "Number of pion npl > 200: " << pi_cum_hist -> GetBinContent(101) << std::endl;
 
