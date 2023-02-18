@@ -154,7 +154,9 @@ int main() {
 		sscanf(path.c_str(), "20230203_nuall_enlarged/evt_%d", &event_id);
 		event_id += 100000;
 		//dproc -> ReadTracksTree(*pvr, path.c_str(), cut); // read linked_tracks with cut npl >= 200.
-		pvr = Utils::ConnectTrack(path, 70, 0.007, "nseg>3&&t.eP>20");
+
+		dproc -> ReadTracksTree(*pvr, path.c_str(), "nseg>3&&t.eP>20");
+		pvr = Utils::ConnectTrack(pvr, 70, 0.007);
 	
 
 		//track_length_hist(pvr, event_id, mu_hist, pi_hist);
@@ -162,6 +164,8 @@ int main() {
 		make_pi_hist(pvr, event_id, pi_hist);
 		num_file ++;
 		if (pvr->eTracks) pvr -> eTracks -> Clear();
+		std::cout << std::endl << std::endl;
+
 	}
 
 	std::cout << num_file << " files are read." << std::endl;

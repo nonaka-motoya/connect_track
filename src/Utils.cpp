@@ -1,5 +1,6 @@
 #include "Utils.hpp"
 
+#include "EdbDataSet.h"
 #include "EdbPattern.h"
 #include "EdbSegP.h"
 #include "TGraph.h"
@@ -256,14 +257,9 @@ void add_tracks(EdbTrackP *track1, EdbTrackP *track2) {
 }
 
 
-EdbPVRec *Utils::ConnectTrack(std::string path, double distance, double angle, TCut cut) {
+EdbPVRec *Utils::ConnectTrack(EdbPVRec* pvr, double distance, double angle) {
 
 	EdbPVRec *connected_pvr = new EdbPVRec;
-
-	// read linked_tracks.root.
-	EdbDataProc* dproc = new EdbDataProc;
-	EdbPVRec* pvr = new EdbPVRec;
-	dproc -> ReadTracksTree(*pvr, path.c_str(), cut);
 
 	// create HashTable
 	std::cout << "Fill HashTable." << std::endl;
@@ -310,8 +306,8 @@ EdbPVRec *Utils::ConnectTrack(std::string path, double distance, double angle, T
 
 					// fill vector of tracks which are to be connected.
 					// after connecting this track, need to remove this track from pvr.
-					std::cout << "MC track ID: " << track -> GetSegmentFirst() -> MCTrack() << "\ttrack ID: " << track -> GetSegmentFirst() -> Track() << "\tcandidate track ID: " << cand_track -> GetSegmentFirst() -> Track() << "\tdtheta: " << delta_theta << "\tdistance: " << dist << std::endl;
-					std::cout << "connect!" << std::endl;
+					//std::cout << "MC track ID: " << track -> GetSegmentFirst() -> MCTrack() << "\ttrack ID: " << track -> GetSegmentFirst() -> Track() << "\tcandidate track ID: " << cand_track -> GetSegmentFirst() -> Track() << "\tdtheta: " << delta_theta << "\tdistance: " << dist << std::endl;
+					//std::cout << "connect!" << std::endl;
 					v_tbc_tracks.push_back(cand_track);
 				}
 			}
@@ -346,6 +342,7 @@ EdbPVRec *Utils::ConnectTrack(std::string path, double distance, double angle, T
 		connected_pvr  -> AddTrack(track);
 	}
 
+	EdbDataProc* dproc = new EdbDataProc;
 	dproc -> MakeTracksTree(connected_pvr, "connect_tracks.root");
 
 	for (auto iter: connected_pdg) {

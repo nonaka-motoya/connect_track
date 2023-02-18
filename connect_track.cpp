@@ -35,7 +35,14 @@ int main() {
 	// development
 	std::string path = "20230107_nuall/evt_2950_pl1_300/linked_tracks.root"; // path of linked_tracks.
 	//std::string path = "20230107_nuall/evt_4812_pl1_300/linked_tracks.root"; // path of linked_tracks.
-	Utils::ConnectTrack(path, 70, 0.007);
+
+
+	EdbDataProc* dproc = new EdbDataProc;
+	EdbPVRec* pvr = new EdbPVRec;
+
+	dproc -> ReadTracksTree(*pvr, path.c_str(), "");
+
+	Utils::ConnectTrack(pvr, 70, 0.007);
 	std::cout << "Read " << path << std::endl;
 
 	app.Run();
