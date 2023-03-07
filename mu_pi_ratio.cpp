@@ -118,18 +118,18 @@ void make_mu_hist(EdbPVRec* pvr, int event_id, TH1D* mu_hist) {
 		std::sort(tracks.begin(), tracks.end(),
 				[](EdbTrackP* lhs, EdbTrackP* rhs) { return lhs -> GetSegmentFirst() -> PID() < rhs -> GetSegmentFirst() -> PID(); });
 
-		int plate = Utils::HasKink(tracks.front());
-		if (plate != -1) {
-			v_path.push_back(std::to_string(event_id));
-			std::cout << "Kink at " << plate << std::endl;
-			mu_hist -> Fill(plate);
-			continue;
-		} else {
-			mu_hist -> Fill(tracks.front() -> Npl());
-		}
+		//int plate = Utils::HasKink(tracks.front());
+		//if (plate != -1) {
+		//	v_path.push_back(std::to_string(event_id));
+		//	std::cout << "Kink at " << plate << std::endl;
+		//	mu_hist -> Fill(plate);
+		//	continue;
+		//} else {
+		//	mu_hist -> Fill(tracks.front() -> Npl());
+		//}
 
 
-		//mu_hist -> Fill(tracks.front() -> Npl());
+		mu_hist -> Fill(tracks.front() -> Npl());
 	}
 	return ;
 }
@@ -163,17 +163,17 @@ void make_pi_hist(EdbPVRec* pvr, int event_id, TH1D* pi_hist) {
 		std::vector<EdbTrackP*> tracks = iter.second;
 		std::sort(tracks.begin(), tracks.end(),
 				[](EdbTrackP* lhs, EdbTrackP* rhs) { return lhs -> GetSegmentFirst() -> PID() < rhs -> GetSegmentFirst() -> PID(); });
-		int plate = Utils::HasKink(tracks.front());
-		if (plate != -1) {
-			pi_hist -> Fill(plate);
-			std::cout << "Kink at " << plate << std::endl;
-			continue;
-		} else {
-			pi_hist -> Fill(tracks.front() -> Npl());
-		}
+		//int plate = Utils::HasKink(tracks.front());
+		//if (plate != -1) {
+		//	pi_hist -> Fill(plate);
+		//	std::cout << "Kink at " << plate << std::endl;
+		//	continue;
+		//} else {
+		//	pi_hist -> Fill(tracks.front() -> Npl());
+		//}
 
 
-		//pi_hist -> Fill(tracks.front() -> Npl());
+		pi_hist -> Fill(tracks.front() -> Npl());
 	}
 
 
@@ -216,8 +216,8 @@ int main() {
 		int event_id = 0;
 		sscanf(path.c_str(), "20230107_nuall/evt_%d", &event_id);
 		event_id += 100000;
-		//dproc -> ReadTracksTree(*pvr, path.c_str(), cut); // read linked_tracks with cut npl >= 200.
-		pvr = Utils::ConnectTrack(path, 70, 0.007);
+		dproc -> ReadTracksTree(*pvr, path.c_str(), cut); // read linked_tracks with cut npl >= 200.
+		//pvr = Utils::ConnectTrack(path, 70, 0.007);
 	
 
 		//track_length_hist(pvr, event_id, mu_hist, pi_hist);
